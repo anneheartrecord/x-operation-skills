@@ -47,7 +47,17 @@ python3 <skill目录>/scripts/post_tweet.py --text "帖子内容"
 python3 <skill目录>/scripts/post_tweet.py --text "帖子内容" --yes
 ```
 
-发 thread:第一条发完拿到返回的 id,后续每条用 `--reply-to <上一条id> --yes`,逐条确认过的文案按顺序发。
+### 发 thread(长文自动拆分)
+
+长文一条发不下时,用同仓 `split_thread.py` 拆:按句界切成 ≤270 加权长度(中文算 2),**把所有链接归拢到末条自回复**,这样整个 thread 只有末条付 $0.20,正文各条 $0.015。
+
+```bash
+python3 <仓库>/x-post/scripts/split_thread.py --file draft.md --number > thread-plan.json
+python3 <skill目录>/scripts/post_tweet.py --thread-file thread-plan.json        # dry-run 预览
+python3 <skill目录>/scripts/post_tweet.py --thread-file thread-plan.json --yes  # 确认后顺序发
+```
+
+注意:链接被抽到末条后,正文里原本「仓库在 <链接>」这类句子会留空档,拆分前把这类句子改成不依赖内联链接的说法(如「仓库和链接放在末条」)。dry-run 会显示每条正文、加权长度、预估总价,让用户确认整个 thread 再发。
 
 ### 第 4 步:回报结果
 

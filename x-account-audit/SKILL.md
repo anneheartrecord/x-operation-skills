@@ -15,13 +15,14 @@ description: |
 
 前置条件:X cookie(env `X_AUTH_TOKEN`/`X_CT0`,配置方法见仓库 README)。按优先级取材:
 
-1. **cookie 自动拉取(默认)**:用同仓 x-content-review 的脚本拉主页信息(bio/显示名/头像与 banner 的 URL/置顶帖全文与数据/粉丝关注比):
+1. **cookie 自动拉取(默认)**:用同仓 x-content-review 的脚本拉主页信息(bio/显示名/头像与 banner/置顶帖全文与数据/粉丝关注比),并把头像和 banner 下载到本地:
 
 ```bash
-python3 <仓库>/x-content-review/scripts/fetch_x_pulse.py --user <handle> --profile
+python3 <仓库>/x-content-review/scripts/fetch_x_pulse.py --user <handle> \
+  --profile --download-media <数据目录>/media
 ```
 
-拉到 avatar_url/banner_url 后下载图片查看,做视觉诊断。
+返回的 `local_media.avatar` / `local_media.banner` 是本地图片路径。**必须用 Read 工具实际打开这两张图看**,再做视觉诊断——头像看缩略图辨识度、是否手绘/真人固定 IP;banner 看是否强化了 bio 那一句话(而不是重复能力清单或放风景图)、手机端文字是否可读。不要只凭 URL 猜,一定要看图。
 2. cookie 不可用时,退化为让用户粘贴:bio 全文、置顶帖内容、头像与封面截图。
 3. 若用户本地有运营手册/核心参考/media kit(常见于知识库运营目录),先读,诊断结论必须与其定位一致。
 

@@ -71,10 +71,38 @@ python3 <skill目录>/scripts/analyze_x_data.py \
 
 报告落盘到用户运营目录(如 `30-outputs/运营/`),命名 `X周报-YYYY-MM-DD.md`。
 
-### 第 4 步:顺手检查
+### 第 4 步:选题库回环(可选)
+
+把复盘结论直接变成下一轮选题:
+
+```bash
+python3 <skill目录>/scripts/topic_feedback.py --analysis /tmp/x-analysis.json
+```
+
+输出 markdown:高效类别的投产建议、A 级帖(扩系列)、B 级帖(换头重发队列)。审阅后合并进用户 `选题库.md`,不要盲目覆盖。
+
+### 第 5 步:顺手检查
 
 - 若用户有 media kit 且数据超过 30 天未更新,提醒刷新。
 - 若用户有账号运营手册/选题库,下周指导须与其对齐,不另起炉灶。
+
+## 对标账号追踪(可选)
+
+看对标在发什么、多勤、什么帖成了:
+
+```bash
+python3 <skill目录>/scripts/track_benchmarks.py --handles vista8,zarazhangrui --days 14
+# 或 --config benchmarks.txt(每行一个 handle)
+```
+
+输出各对标的粉丝、发帖频率(帖/天)、中位/均曝光、Top 帖。用来校准自己的发帖节奏和选题,不是抄内容。
+
+## 数据落盘与自动化
+
+- **数据目录**:`~/.local/share/x-operation-skills/`(可用 `X_SKILLS_DATA_DIR` 覆盖)。twscrape 状态库 `accounts.db`、粉丝快照 `x-follower-snapshots.jsonl`、分析 JSON 都在这——**刻意不放知识库运营目录**,因 accounts.db 含登录态,避免误提交。
+- **粉丝快照定时**:`~/.agent-harness/bin/x-follower-snapshot.sh`(launchd `com.charles.x-follower-snapshot`,每日 23:30)每天记一次粉丝数,积累后周报环比才有值。
+- **周报备数据定时**:`~/.agent-harness/bin/x-weekly-report-prep.sh`(launchd `com.charles.x-weekly-report-prep`,周一 10:00)自动拉数 + 分析 + 归档旧 JSON,叙事周报仍由 agent 基于 JSON 写(prose 需 LLM)。
+- **环比**:analysis JSON 的 `content.period_comparison` 给本期 vs 上期(帖数/曝光/效率),粉丝环比需快照跨度够才有值。
 
 ## 判断规则(硬口径)
 

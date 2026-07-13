@@ -31,6 +31,44 @@ def resolve_proxy():
             or os.environ.get("HTTP_PROXY") or None)
 
 
+def resolve_data_dir():
+    """twscrape 状态库(accounts.db)与快照的存放目录。
+
+    默认 ~/.local/share/x-operation-skills,可用 X_SKILLS_DATA_DIR 覆盖。
+    刻意不放知识库运营目录:accounts.db 含登录态,避免误提交进 git。
+    """
+    data_dir = os.environ.get("X_SKILLS_DATA_DIR") or os.path.expanduser(
+        "~/.local/share/x-operation-skills")
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
+
+def download_media(media_urls, target_dir):
+    """把头像/banner 等图片经代理下载到本地,返回 {名称: 本地路径}。供账号诊断看图。"""
+    import curl_cffi
+
+    proxy = resolve_proxy()
+    os.makedirs(target_dir, exist_ok=True)
+    saved = {}
+    for name, url in media_urls.items():
+        if not url:
+            continue
+        # 头像 URL 常带 _normal 后缀是小图,换成原图
+        full_url = url.replace("_normal.", ".")
+        # 取扩展名:必须是最后一段路径里的纯后缀(banner URL 无后缀,回退 jpg)
+        last_segment = full_url.split("?")[0].rsplit("/", 1)[-1]
+        extension = last_segment.rsplit(".", 1)[-1] if "." in last_segment else "jpg"
+        if not extension.isalnum() or len(extension) > 4:
+            extension = "jpg"
+        local_path = os.path.join(target_dir, f"{name}.{extension}")
+        response = curl_cffi.requests.get(full_url, proxy=proxy, timeout=20)
+        if response.status_code == 200:
+            with open(local_path, "wb") as image_file:
+                image_file.write(response.content)
+            saved[name] = local_path
+    return saved
+
+
 def patch_xclid_proxy(proxy):
     """把代理注入 twscrape 的 XClIdGen client(它自身不传 proxy,国内会连不上)。
 
@@ -65,7 +103,7 @@ async def build_api(username):
 
     proxy = resolve_proxy()
     patch_xclid_proxy(proxy)
-    api = API(proxy=proxy)
+    api = API(os.path.join(resolve_data_dir(), "accounts.db"), proxy=proxy)
     cookie_string = f"auth_token={auth_token}; ct0={ct0}"
     # twscrape 以「账号池」组织登录态;注入单个 cookie 账号(已存在则忽略),再标记 active
     try:
@@ -160,6 +198,8 @@ def main():
     parser.add_argument("--snapshot-file", help="粉丝数快照 JSONL 路径(可选,用于算周环比涨粉)")
     parser.add_argument("--profile", action="store_true",
                         help="只拉主页信息(bio/头像/banner/置顶帖),供账号诊断用")
+    parser.add_argument("--download-media",
+                        help="配合 --profile:把头像/banner 下载到该目录,返回本地路径供看图")
     args = parser.parse_args()
 
     try:
@@ -170,6 +210,10 @@ def main():
 
     if args.profile:
         result = asyncio.run(fetch_profile(args.user))
+        if args.download_media:
+            result["local_media"] = download_media(
+                {"avatar": result.get("avatar_url"), "banner": result.get("banner_url")},
+                args.download_media)
     else:
         result = asyncio.run(fetch_recent_posts(args.user, args.limit))
         if args.snapshot_file:

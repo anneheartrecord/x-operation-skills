@@ -1,0 +1,4 @@
+# 对标账号清单（每行一个 handle，不带 @，# 开头为注释）
+# 用法：track_benchmarks.py --config benchmarks.example.txt
+vista8
+zarazhangrui

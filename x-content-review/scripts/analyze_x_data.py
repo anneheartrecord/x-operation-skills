@@ -200,6 +200,52 @@ def analyze_content(content_rows, window_days, today, category_keywords):
     }
 
 
+def compute_period_comparison(posts, window_days, today, follower_trend):
+    """本期 vs 上期环比:把帖子按发布日切成 [今-N,今] 与 [今-2N,今-N] 两段对比。
+
+    帖子指标(曝光/收藏/效率)按发布日归期;粉丝环比从快照取两期边界的差值。
+    """
+    current_start = today - timedelta(days=window_days)
+    previous_start = today - timedelta(days=2 * window_days)
+
+    def period_stats(start_date, end_date):
+        """统计 [start, end) 区间内帖子的汇总指标。"""
+        views = bookmarks = count = 0
+        for post in posts:
+            post_date = datetime.strptime(post["posted_at"], "%Y-%m-%d %H:%M").date()
+            if start_date <= post_date < end_date:
+                count += 1
+                views += post["views"]
+                bookmarks += post["bookmarks"]
+        rate = round(bookmarks / views * 10000, 1) if views else 0
+        return {"posts": count, "views": views, "bookmarks": bookmarks,
+                "bookmarks_per_10k_views": rate}
+
+    current = period_stats(current_start, today + timedelta(days=1))
+    previous = period_stats(previous_start, current_start)
+
+    # 粉丝环比:快照里离两期边界最近的值
+    def followers_on_or_before(target_date):
+        """取快照中不晚于 target_date 的最后一个粉丝数(没有则 None)。"""
+        candidates = [record for record in follower_trend
+                      if record.get("date", "") <= target_date.isoformat()]
+        return candidates[-1]["followers"] if candidates else None
+
+    followers_now = followers_on_or_before(today)
+    followers_prev = followers_on_or_before(current_start)
+    follower_delta = (followers_now - followers_prev
+                      if followers_now is not None and followers_prev is not None else None)
+
+    return {
+        "note": "本期=近 N 天,上期=前 N 天(N=window_days);粉丝环比需快照跨度≥N 天才有值",
+        "current_period": current,
+        "previous_period": previous,
+        "follower_delta": follower_delta,
+        "follower_delta_note": None if follower_delta is not None
+        else "快照跨度不足,继续积累每日快照后自动出现",
+    }
+
+
 def analyze_pulse(pulse_data, window_days, today, category_keywords, snapshot_path):
     """Pulse 模式分析:基于公开指标(views/收藏),口径为「收藏/万曝光」。
 
@@ -258,6 +304,7 @@ def analyze_pulse(pulse_data, window_days, today, category_keywords, snapshot_pa
         "metric_note": "pulse 模式无净涨粉数据,口径为 收藏/万曝光(views);涨粉看 follower_trend 快照差值",
         "followers_now": pulse_data.get("followers"),
         "follower_trend": follower_trend,
+        "period_comparison": compute_period_comparison(posts, window_days, today, follower_trend),
         "post_count_total": len(posts),
         "original_count": len(original_posts),
         "median_views": median_views,

@@ -50,12 +50,49 @@ def build_client():
     )
 
 
+def post_thread(thread_plan, confirmed):
+    """按 thread plan 顺序发布:每条回复上一条,形成 thread。默认 dry-run。"""
+    tweets = thread_plan.get("tweets", [])
+    if not confirmed:
+        print(json.dumps({"dry_run": True, "tweet_count": len(tweets),
+                          "estimated_cost_usd": thread_plan.get("estimated_cost_usd"),
+                          "tweets": tweets}, ensure_ascii=False, indent=2))
+        print(f"\n未发布。这是 {len(tweets)} 条 thread 预览,确认后加 --yes 发布。", file=sys.stderr)
+        return
+
+    try:
+        import tweepy  # noqa: F401
+    except ImportError:
+        print("错误:未安装 tweepy,先执行 pip3 install tweepy", file=sys.stderr)
+        sys.exit(1)
+
+    client = build_client()
+    posted, reply_to = [], None
+    for index, tweet in enumerate(tweets, 1):
+        response = client.create_tweet(text=tweet["text"], in_reply_to_tweet_id=reply_to)
+        reply_to = response.data["id"]  # 下一条回复这一条
+        posted.append({"seq": index, "id": reply_to,
+                       "url": f"https://x.com/i/status/{reply_to}"})
+    print(json.dumps({"posted_thread": True, "tweets": posted},
+                     ensure_ascii=False, indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(description="X 官方 API 发帖(默认 dry-run,--yes 才发布)")
-    parser.add_argument("--text", required=True, help="帖子正文")
+    parser.add_argument("--text", help="帖子正文(单条模式)")
+    parser.add_argument("--thread-file", help="split_thread.py 生成的 thread plan JSON(thread 模式)")
     parser.add_argument("--reply-to", help="要回复的帖子 id(可选)")
     parser.add_argument("--yes", action="store_true", help="确认发布;不带此参数只做预览")
     args = parser.parse_args()
+
+    if args.thread_file:
+        with open(args.thread_file, encoding="utf-8") as plan_file:
+            post_thread(json.load(plan_file), args.yes)
+        return
+
+    if not args.text:
+        print("错误:需提供 --text(单条)或 --thread-file(thread)", file=sys.stderr)
+        sys.exit(1)
 
     cost_label, has_url = estimate_cost(args.text)
     preview = {
