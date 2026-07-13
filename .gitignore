@@ -3,3 +3,4 @@ __pycache__/
 *.csv
 accounts.db
 x-follower-snapshots.jsonl
+.DS_Store
