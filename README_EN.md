@@ -13,12 +13,32 @@ A collection of X (Twitter) account operation skills. Each subdirectory is a sta
 |---|---|---|
 | [x-content-review](./x-content-review/) | Data review: posting time-slot conversion (UTC+8), category efficiency, A/B/C post grading, weekly report with next-week guidance | "X weekly review" |
 | [x-account-audit](./x-account-audit/) | Profile audit: bio, pinned post, banner, avatar, recognizability, and profile funnel, with ready-to-use rewrites | "audit my X account" |
+| [x-post](./x-post/) | Posting via the official X API: dry-run preview with cost estimate first, publishes only after explicit confirmation; supports replies and threads | "post this to X" |
 
 Planned: x-hotspot-radar (trending-topic radar: hot topic digest → tweet drafts).
 
-## Prerequisite: X cookies (configure once, shared by all skills)
+## Credentials
 
-Both skills read data through your own account's login cookies by default (the official X API no longer has a free tier). One-time setup:
+### Official API (recommended: read your own data + post)
+
+The official X API uses prepaid credits, deducted per request, no subscriptions. Key prices: reading your own posts/followers/bookmarks $0.001/request (a full review costs under a cent), posting a text tweet $0.015, posting a tweet with a link $0.20 (X deliberately suppresses external links).
+
+1. Create a project at developer.x.com and purchase credits.
+2. On the project's Keys and tokens page, generate Consumer Keys and an Access Token (check **Read and write**).
+3. Save the four values as environment variables (ideally `~/.config/secrets/api-keys.env`):
+
+```bash
+export X_API_KEY="..."
+export X_API_SECRET="..."
+export X_ACCESS_TOKEN="..."
+export X_ACCESS_TOKEN_SECRET="..."
+```
+
+4. Install the dependency: `pip3 install tweepy`.
+
+### Cookies (free fallback: read-only)
+
+Without prepaid credits, x-content-review and x-account-audit can still read data via login cookies (x-post requires the official API; cookies cannot write):
 
 1. Log in to x.com in your browser.
 2. Press F12 to open DevTools → **Application** tab (Chrome/Edge; **Storage** in Firefox) → **Cookies** → `https://x.com`.

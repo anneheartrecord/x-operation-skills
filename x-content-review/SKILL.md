@@ -11,29 +11,39 @@ description: |
 
 把 X Analytics 数据变成可执行的运营决策:什么类别涨粉快、什么时段发效率高、哪些帖子该扩成系列、哪些该换头重发、哪些选题该停。
 
-## 数据源(pulse 先行,CSV 为增强口径)
+## 数据源(三条路,按优先级)
 
-1. **Pulse 模式(默认)**:零手工导出。用 cookie 登录态(env `X_AUTH_TOKEN`/`X_CT0`,依赖 twscrape)拉最近原创帖公开指标 + 当前粉丝数。指标为 views/likes/收藏,转化口径「收藏/万曝光」;涨粉趋势靠粉丝数快照 JSONL 差值(每次跑自动追加快照,越用越准)。
-2. **CSV 模式(增强,用户主动导出时)**:X Analytics 后台两份 CSV(`account_overview_analytics*.csv` 日度总览 + `account_analytics_content*.csv` 单帖明细),独有「净涨粉/主页访问」,转化口径升级为「涨粉/万曝光」。**运营目录里有 7 天内的新 CSV 对时自动改走 CSV 模式**,否则不要求用户导出。
+1. **API 模式(首选,配了官方 API 凭证时)**:X 官方 pay-per-use 接口读自己账号数据,$0.001/请求,一次复盘不到 1 美分。官方接口稳定,且 `impression_count` 是真曝光数,口径与 analytics 后台对齐。凭证为四个 env(`X_API_KEY`/`X_API_SECRET`/`X_ACCESS_TOKEN`/`X_ACCESS_TOKEN_SECRET`),依赖 tweepy。
+2. **Pulse 模式(免费兜底)**:cookie 登录态(env `X_AUTH_TOKEN`/`X_CT0`,依赖 twscrape)拉公开指标,views 为公开浏览数。
+3. **CSV 模式(增强,用户主动导出时)**:X Analytics 后台两份 CSV(`account_overview_analytics*.csv` + `account_analytics_content*.csv`),独有「净涨粉/主页访问」,转化口径升级为「涨粉/万曝光」。**运营目录里有 7 天内的新 CSV 对时自动改走 CSV 模式**。
+
+API 和 pulse 模式的涨粉趋势都靠粉丝数快照 JSONL 差值(每次跑自动追加快照,越用越准),转化口径为「收藏/万曝光」。
 
 ## 工作流程
 
 ### 第 1 步:选数据路径
 
 - 先看用户运营目录(惯例 `30-outputs/运营/`)有无 7 天内导出的 CSV 对:有 → CSV 模式;
-- 没有 → pulse 模式:
+- 没有,四个 API env 齐 → API 模式:
+
+```bash
+python3 <skill目录>/scripts/fetch_x_api.py --limit 100 \
+  --snapshot-file <运营目录>/x-follower-snapshots.jsonl > /tmp/x-pulse.json
+```
+
+- API 凭证不全 → pulse 模式:
 
 ```bash
 python3 <skill目录>/scripts/fetch_x_pulse.py --user <handle> --limit 100 \
   --snapshot-file <运营目录>/x-follower-snapshots.jsonl > /tmp/x-pulse.json
 ```
 
-cookie 缺失或 twscrape 未装时脚本会报错并给配置指引,此时按「登录态说明」帮用户配好,或建议改导 CSV。
+两个脚本输出同构 JSON,后续分析命令一样。凭证缺失时脚本会报错并给配置指引。
 
 ### 第 2 步:跑分析脚本
 
 ```bash
-# pulse 模式(默认)
+# API / pulse 模式(两者输出同构,统一走 --pulse)
 python3 <skill目录>/scripts/analyze_x_data.py --pulse /tmp/x-pulse.json \
   --snapshots <运营目录>/x-follower-snapshots.jsonl --days 7
 # CSV 模式
