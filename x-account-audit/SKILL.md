@@ -13,11 +13,17 @@ description: |
 
 ## 第 1 步:收集材料
 
-按优先级取材,缺什么就向用户要什么:
+前置条件:X cookie(env `X_AUTH_TOKEN`/`X_CT0`,配置方法见仓库 README)。按优先级取材:
 
-1. 用户直接粘贴:bio 全文、置顶帖内容、头像与封面截图、用户名/显示名。
-2. 若用户本地有运营手册/核心参考/media kit(常见于知识库运营目录),先读,诊断结论必须与其定位一致。
-3. 补充数字:粉丝数、关注数(算关注结构比)、代表作数据(做证据盘点用)。
+1. **cookie 自动拉取(默认)**:用同仓 x-content-review 的脚本拉主页信息(bio/显示名/头像与 banner 的 URL/置顶帖全文与数据/粉丝关注比):
+
+```bash
+python3 <仓库>/x-content-review/scripts/fetch_x_pulse.py --user <handle> --profile
+```
+
+拉到 avatar_url/banner_url 后下载图片查看,做视觉诊断。
+2. cookie 不可用时,退化为让用户粘贴:bio 全文、置顶帖内容、头像与封面截图。
+3. 若用户本地有运营手册/核心参考/media kit(常见于知识库运营目录),先读,诊断结论必须与其定位一致。
 
 ## 第 2 步:逐项诊断
 

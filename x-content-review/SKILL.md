@@ -11,32 +11,41 @@ description: |
 
 把 X Analytics 数据变成可执行的运营决策:什么类别涨粉快、什么时段发效率高、哪些帖子该扩成系列、哪些该换头重发、哪些选题该停。
 
-## 数据源(两条路,CSV 为权威源)
+## 数据源(pulse 先行,CSV 为增强口径)
 
-1. **CSV 模式(默认、权威)**:用户从 X Analytics 后台导出两份 CSV:
-   - `account_overview_analytics*.csv` — 日度总览(曝光/涨粉/掉粉/发帖数/主页访问)
-   - `account_analytics_content*.csv` — 单帖明细(曝光/收藏/涨粉/主页访问)
-   - 用户惯例存放目录:`30-outputs/运营/`(知识库内)。自动选**文件名日期最新**的一对。
-2. **Pulse 模式(可选、快速)**:用户没导 CSV 又想看最新情况时,跑 `scripts/fetch_x_pulse.py`(cookie 登录态,env `X_AUTH_TOKEN`/`X_CT0`,依赖 twscrape)。只有公开指标,**没有净涨粉和主页访问数据**,只做「最近帖子表现速览」,不出正式周报。
+1. **Pulse 模式(默认)**:零手工导出。用 cookie 登录态(env `X_AUTH_TOKEN`/`X_CT0`,依赖 twscrape)拉最近原创帖公开指标 + 当前粉丝数。指标为 views/likes/收藏,转化口径「收藏/万曝光」;涨粉趋势靠粉丝数快照 JSONL 差值(每次跑自动追加快照,越用越准)。
+2. **CSV 模式(增强,用户主动导出时)**:X Analytics 后台两份 CSV(`account_overview_analytics*.csv` 日度总览 + `account_analytics_content*.csv` 单帖明细),独有「净涨粉/主页访问」,转化口径升级为「涨粉/万曝光」。**运营目录里有 7 天内的新 CSV 对时自动改走 CSV 模式**,否则不要求用户导出。
 
 ## 工作流程
 
-### 第 1 步:定位数据
+### 第 1 步:选数据路径
 
-在运营目录找最新的 overview + content CSV。若 overview 最新日期距今超过 2 天,提醒用户重新导出(X Analytics → 下载数据),不要拿旧数据出周报。
+- 先看用户运营目录(惯例 `30-outputs/运营/`)有无 7 天内导出的 CSV 对:有 → CSV 模式;
+- 没有 → pulse 模式:
+
+```bash
+python3 <skill目录>/scripts/fetch_x_pulse.py --user <handle> --limit 100 \
+  --snapshot-file <运营目录>/x-follower-snapshots.jsonl > /tmp/x-pulse.json
+```
+
+cookie 缺失或 twscrape 未装时脚本会报错并给配置指引,此时按「登录态说明」帮用户配好,或建议改导 CSV。
 
 ### 第 2 步:跑分析脚本
 
 ```bash
+# pulse 模式(默认)
+python3 <skill目录>/scripts/analyze_x_data.py --pulse /tmp/x-pulse.json \
+  --snapshots <运营目录>/x-follower-snapshots.jsonl --days 7
+# CSV 模式
 python3 <skill目录>/scripts/analyze_x_data.py \
   --overview <最新overview.csv> --content <最新content.csv> --days 7
 ```
 
-脚本输出 JSON:
-- `overview.window_summary` / `window_daily` / `weekly_trend`:窗口汇总、日度明细、周度趋势
-- `content.time_slots_beijing`:发帖时间从 Post id(Snowflake)反推,北京时间 2 小时分桶,含「涨粉/万曝光」
-- `content.categories`:类别转化(涨粉/万曝光),reply 单列
+脚本输出 JSON(两种模式同构):
+- `content.time_slots_beijing`:北京时间 2 小时分桶的时段表现(CSV 模式从 Post id 雪花 ID 反推发帖时间)
+- `content.categories`:类别转化,reply 单列;pulse 口径「收藏/万曝光」,CSV 口径「涨粉/万曝光」
 - `content.window_top_posts` / `repost_candidates_grade_b`:窗口 Top 帖与 B 级(低曝光高收藏,换头重发候选)
+- pulse 另有 `followers_now`/`follower_trend`(粉丝快照趋势);CSV 另有 `overview.*`(周度趋势/净涨粉)
 
 类别关键词表可用 `--categories 自定义.json` 覆盖(格式:`{"类别名": ["关键词", ...]}`)。
 

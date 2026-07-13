@@ -200,10 +200,84 @@ def analyze_content(content_rows, window_days, today, category_keywords):
     }
 
 
+def analyze_pulse(pulse_data, window_days, today, category_keywords, snapshot_path):
+    """Pulse 模式分析:基于公开指标(views/收藏),口径为「收藏/万曝光」。
+
+    没有 analytics 后台的净涨粉与主页访问;涨粉趋势来自粉丝数快照 JSONL(若提供)。
+    """
+    window_start = today - timedelta(days=window_days)
+    posts = []
+    for raw_post in pulse_data.get("posts", []):
+        posted_at = datetime.fromisoformat(raw_post["posted_at"]).astimezone(TZ_BEIJING)
+        post_text = raw_post.get("text", "")
+        posts.append({
+            "id": raw_post["id"],
+            "posted_at": posted_at.strftime("%Y-%m-%d %H:%M"),
+            "hour": posted_at.hour,
+            "views": raw_post.get("views") or 0,
+            "likes": raw_post.get("likes") or 0,
+            "bookmarks": raw_post.get("bookmarks") or 0,
+            "text": re.sub(r"\s+", " ", post_text)[:60],
+            "url": raw_post.get("url", ""),
+            "category": classify_post(post_text, category_keywords),
+            "in_window": posted_at.date() >= window_start,
+        })
+    original_posts = [post for post in posts if post["category"] != "reply"]
+
+    slot_stats = defaultdict(lambda: {"posts": 0, "views": 0, "bookmarks": 0})
+    category_stats = defaultdict(lambda: {"posts": 0, "views": 0, "bookmarks": 0})
+    for post in original_posts:
+        slot_label = f"{post['hour'] // 2 * 2:02d}-{post['hour'] // 2 * 2 + 2:02d}"
+        slot_stats[slot_label]["posts"] += 1
+        slot_stats[slot_label]["views"] += post["views"]
+        slot_stats[slot_label]["bookmarks"] += post["bookmarks"]
+    for post in posts:
+        category_stats[post["category"]]["posts"] += 1
+        category_stats[post["category"]]["views"] += post["views"]
+        category_stats[post["category"]]["bookmarks"] += post["bookmarks"]
+
+    def with_bookmark_rate(metrics):
+        """补充「收藏/万曝光」比率字段。"""
+        rate = metrics["bookmarks"] / metrics["views"] * 10000 if metrics["views"] else 0
+        return {**metrics, "bookmarks_per_10k_views": round(rate, 1)}
+
+    sorted_views = sorted(post["views"] for post in original_posts) or [0]
+    median_views = sorted_views[len(sorted_views) // 2]
+    for post in original_posts:
+        post["grade"] = grade_post(post["views"], post["bookmarks"], median_views)
+
+    follower_trend = []
+    if snapshot_path:
+        try:
+            with open(snapshot_path, encoding="utf-8") as snapshot_file:
+                follower_trend = [json.loads(line) for line in snapshot_file if line.strip()]
+        except FileNotFoundError:
+            pass
+
+    return {
+        "metric_note": "pulse 模式无净涨粉数据,口径为 收藏/万曝光(views);涨粉看 follower_trend 快照差值",
+        "followers_now": pulse_data.get("followers"),
+        "follower_trend": follower_trend,
+        "post_count_total": len(posts),
+        "original_count": len(original_posts),
+        "median_views": median_views,
+        "time_slots_beijing": [{"slot_beijing": slot, **with_bookmark_rate(metrics)}
+                               for slot, metrics in sorted(slot_stats.items())],
+        "categories": [{"category": name, **with_bookmark_rate(metrics)}
+                       for name, metrics in sorted(category_stats.items(),
+                                                   key=lambda item: -item[1]["views"])],
+        "window_top_posts": sorted([p for p in original_posts if p["in_window"]],
+                                   key=lambda post: -post["views"])[:10],
+        "repost_candidates_grade_b": [p for p in original_posts if p.get("grade") == "B"][:5],
+    }
+
+
 def main():
-    parser = argparse.ArgumentParser(description="X 账号数据复盘分析")
-    parser.add_argument("--overview", required=True, help="日度总览 CSV 路径")
-    parser.add_argument("--content", required=True, help="单帖明细 CSV 路径")
+    parser = argparse.ArgumentParser(description="X 账号数据复盘分析(pulse 模式或 CSV 模式)")
+    parser.add_argument("--pulse", help="fetch_x_pulse.py 输出的 JSON 路径(pulse 模式,默认路径)")
+    parser.add_argument("--snapshots", help="粉丝数快照 JSONL 路径(pulse 模式可选)")
+    parser.add_argument("--overview", help="日度总览 CSV 路径(CSV 模式)")
+    parser.add_argument("--content", help="单帖明细 CSV 路径(CSV 模式)")
     parser.add_argument("--days", type=int, default=7, help="复盘窗口天数(默认 7)")
     parser.add_argument("--categories", help="类别关键词 JSON 路径(可选,覆盖默认表)")
     args = parser.parse_args()
@@ -213,19 +287,31 @@ def main():
         with open(args.categories, encoding="utf-8") as keywords_file:
             category_keywords = json.load(keywords_file)
 
-    overview_rows = read_csv_rows(args.overview)
-    content_rows = read_csv_rows(args.content)
-    if not overview_rows or not content_rows:
-        print("错误:CSV 为空或表头不匹配", file=sys.stderr)
-        sys.exit(1)
-
     today = datetime.now(TZ_BEIJING).date()
     result = {
         "generated_at": datetime.now(TZ_BEIJING).strftime("%Y-%m-%d %H:%M %z"),
         "window_days": args.days,
-        "overview": analyze_overview(overview_rows, args.days, today),
-        "content": analyze_content(content_rows, args.days, today, category_keywords),
     }
+
+    if args.pulse:
+        with open(args.pulse, encoding="utf-8") as pulse_file:
+            pulse_data = json.load(pulse_file)
+        result["mode"] = "pulse"
+        result["content"] = analyze_pulse(pulse_data, args.days, today,
+                                          category_keywords, args.snapshots)
+    elif args.overview and args.content:
+        overview_rows = read_csv_rows(args.overview)
+        content_rows = read_csv_rows(args.content)
+        if not overview_rows or not content_rows:
+            print("错误:CSV 为空或表头不匹配", file=sys.stderr)
+            sys.exit(1)
+        result["mode"] = "csv"
+        result["overview"] = analyze_overview(overview_rows, args.days, today)
+        result["content"] = analyze_content(content_rows, args.days, today, category_keywords)
+    else:
+        print("错误:需提供 --pulse,或同时提供 --overview 与 --content", file=sys.stderr)
+        sys.exit(1)
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
