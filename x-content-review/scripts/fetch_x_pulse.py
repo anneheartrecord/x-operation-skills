@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """X 账号快速拉数(pulse 模式):用登录 cookie 拉最近原创帖的公开指标或账号主页信息。
 
-依赖 twscrape(pip install twscrape),登录态来自环境变量:
+依赖 twscrape + curl_cffi(pip install twscrape curl_cffi),登录态来自环境变量:
   X_AUTH_TOKEN  -- x.com cookie 中的 auth_token
   X_CT0         -- x.com cookie 中的 ct0
-两者按惯例存放于 ~/.config/secrets/api-keys.env,由 shell 自动注入。
+  X_PROXY       -- (可选)访问 X 的代理,如 http://127.0.0.1:7890;
+                   不设则退回 HTTPS_PROXY/HTTP_PROXY。国内访问 X 必须有代理。
+前三者按惯例存放于 ~/.config/secrets/api-keys.env,由 shell 自动注入。
 
 只能拿公开指标(views/likes/RT/bookmarks/回复数),拿不到 analytics 后台的
 「净涨粉」「profile visits」——那些以 X Analytics 导出的 CSV 为准。
@@ -23,8 +25,32 @@ import os
 import sys
 
 
-def build_api(username):
-    """校验 cookie 环境变量并构造注入了单账号登录态的 twscrape API。"""
+def resolve_proxy():
+    """解析代理地址(国内访问 X 必需):优先 X_PROXY,退回 HTTPS_PROXY/HTTP_PROXY。"""
+    return (os.environ.get("X_PROXY") or os.environ.get("HTTPS_PROXY")
+            or os.environ.get("HTTP_PROXY") or None)
+
+
+def patch_xclid_proxy(proxy):
+    """把代理注入 twscrape 的 XClIdGen client(它自身不传 proxy,国内会连不上)。
+
+    XClIdGen 生成 x-client-transaction-id 时新建的 httpx client 不带代理,且其自定义
+    transport 会忽略 env 代理;这里强制它走 curl 后端并带上代理,是国内跑通的关键。
+    """
+    if not proxy:
+        return
+    import twscrape.xclid as xclid
+    from twscrape.http import make_client
+
+    def make_client_with_proxy(*_args, **kwargs):
+        allowed = {key: kwargs[key] for key in ("headers", "cookies") if key in kwargs}
+        return make_client("curl", proxy=proxy, **allowed)
+
+    xclid._make_http_client = make_client_with_proxy
+
+
+async def build_api(username):
+    """校验 cookie 环境变量,构造并激活注入了单账号登录态的 twscrape API(代理感知)。"""
     from twscrape import API
 
     auth_token = os.environ.get("X_AUTH_TOKEN", "")
@@ -36,16 +62,24 @@ def build_api(username):
               '  export X_AUTH_TOKEN="..."\n  export X_CT0="..."',
               file=sys.stderr)
         sys.exit(1)
-    api = API()
+
+    proxy = resolve_proxy()
+    patch_xclid_proxy(proxy)
+    api = API(proxy=proxy)
     cookie_string = f"auth_token={auth_token}; ct0={ct0}"
-    # twscrape 以「账号池」组织登录态;这里注入单个 cookie 账号
-    return api, api.pool.add_account(username, "-", "-", "-", cookies=cookie_string)
+    # twscrape 以「账号池」组织登录态;注入单个 cookie 账号(已存在则忽略),再标记 active
+    try:
+        await api.pool.add_account(username, "-", "-", "-",
+                                   cookies=cookie_string, proxy=proxy)
+    except Exception:  # 账号已存在等非致命情况,继续用池里的
+        pass
+    await api.pool.set_active(username, True)
+    return api
 
 
 async def fetch_profile(username):
     """拉取账号主页信息:bio、头像、banner、置顶帖、关注结构。供账号诊断用。"""
-    api, add_account_coro = build_api(username)
-    await add_account_coro
+    api = await build_api(username)
 
     user = await api.user_by_login(username)
     pinned_posts = []
@@ -73,12 +107,21 @@ async def fetch_profile(username):
 
 async def fetch_recent_posts(username, limit):
     """用 cookie 登录态拉取指定用户最近的帖子,返回公开指标列表。"""
-    api, add_account_coro = build_api(username)
-    await add_account_coro
+    api = await build_api(username)
 
     user = await api.user_by_login(username)
     posts = []
+    seen_ids = set()  # 分页偶尔返回重复帖,按 id 去重
     async for tweet in api.user_tweets(user.id, limit=limit):
+        # 只保留作者是本人的帖。user_tweets 会混入转推(此 twscrape 版本不设
+        # retweetedTweet,而是直接返回原作者的 tweet 对象),转推的曝光/收藏属于原
+        # 作者,算进来会把百万曝光的官方号内容误计为本账号表现,彻底污染分析。
+        tweet_author = getattr(tweet.user, "username", "") if tweet.user else ""
+        if tweet_author.lower() != username.lower():
+            continue
+        if str(tweet.id) in seen_ids:
+            continue
+        seen_ids.add(str(tweet.id))
         posts.append({
             "id": str(tweet.id),
             "posted_at": tweet.date.isoformat(),
@@ -88,6 +131,8 @@ async def fetch_recent_posts(username, limit):
             "reposts": tweet.retweetCount,
             "replies": tweet.replyCount,
             "bookmarks": tweet.bookmarkedCount,
+            # 标记引用推:引用是本账号的原创评论,保留但单独可辨
+            "is_quote": getattr(tweet, "quotedTweet", None) is not None,
             "url": tweet.url,
         })
     return {"user": username, "followers": user.followersCount, "posts": posts}

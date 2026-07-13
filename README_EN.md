@@ -14,8 +14,7 @@ A collection of X (Twitter) account operation skills. Each subdirectory is a sta
 | [x-content-review](./x-content-review/) | Data review: posting time-slot conversion (UTC+8), category efficiency, A/B/C post grading, weekly report with next-week guidance | "X weekly review" |
 | [x-account-audit](./x-account-audit/) | Profile audit: bio, pinned post, banner, avatar, recognizability, and profile funnel, with ready-to-use rewrites | "audit my X account" |
 | [x-post](./x-post/) | Posting via the official X API: dry-run preview with cost estimate first, publishes only after explicit confirmation; supports replies and threads | "post this to X" |
-
-Planned: x-hotspot-radar (trending-topic radar: hot topic digest → tweet drafts).
+| [x-hotspot-radar](./x-hotspot-radar/) | Hotspot radar: scan → five-filter → outline → calibration → draft → de-AI → images → save; orchestrates your existing writing/de-AI/image systems | "scan hotspots", "what to post today" |
 
 ## Credentials
 
@@ -50,7 +49,8 @@ export X_AUTH_TOKEN="auth_token value from step 3"
 export X_CT0="ct0 value from step 3"
 ```
 
-5. Install the dependency: `pip3 install twscrape`.
+5. Install dependencies: `pip3 install twscrape curl_cffi` (curl_cffi is required for TLS fingerprint impersonation; without it, cookie reads fail on some networks).
+6. If X is blocked on your network, set `export X_PROXY="http://127.0.0.1:7890"` (your proxy port); the scripts fall back to `HTTPS_PROXY`/`HTTP_PROXY` if unset.
 
 Treat cookies like passwords: keep them in a local private file and never commit them. Logging out of x.com invalidates them; log back in and copy again.
 
