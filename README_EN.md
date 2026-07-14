@@ -5,69 +5,56 @@
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Language](https://img.shields.io/badge/Language-Python3%20%2B%20Markdown-green.svg)
 
-A collection of X (Twitter) account operation skills. Each subdirectory is a standalone skill installable into Claude Code / Codex or any agent that supports SKILL.md.
+A set of X (Twitter) operation skills for AI agents (Claude Code / Codex). Install them, configure your cookie once, then ask the agent in one sentence to review analytics, audit your account, post, or turn a hot topic into a tweet.
 
-## Skills
+## What it does
 
-| Skill | Purpose | Trigger |
+| Skill | Purpose | Ask the agent |
 |---|---|---|
-| [x-content-review](./x-content-review/) | Data review: posting time-slot conversion (UTC+8), category efficiency, A/B/C post grading, weekly report with next-week guidance | "X weekly review" |
-| [x-account-audit](./x-account-audit/) | Profile audit: bio, pinned post, banner, avatar, recognizability, and profile funnel, with ready-to-use rewrites | "audit my X account" |
-| [x-post](./x-post/) | Posting via the official X API: dry-run preview with cost estimate first, publishes only after explicit confirmation; supports replies and threads | "post this to X" |
-| [x-hotspot-radar](./x-hotspot-radar/) | Hotspot radar: scan → five-filter → outline → calibration → draft → de-AI → images → save; orchestrates your existing writing/de-AI/image systems | "scan hotspots", "what to post today" |
+| **x-content-review** | Pull your account data, find **which content and which time slots grow followers fastest**, give next-week guidance | "X weekly review" |
+| **x-account-audit** | Audit bio / pinned / avatar / banner, hand back ready-to-use rewrites | "audit my X account" |
+| **x-post** | Post via the official API with a cost preview and confirmation; auto-splits long form into a thread | "post this to X" |
+| **x-hotspot-radar** | Scan hot topics → filter → draft a tweet in your voice, de-AI'd, with images | "what to post today" |
 
-## Credentials
+Also included: daily follower snapshot + **unattended weekly report** (launchd), benchmark tracking, topic-library loop, and cookie health check.
 
-### Official API (recommended: read your own data + post)
+## How to use
 
-The official X API uses prepaid credits, deducted per request, no subscriptions. Key prices: reading your own posts/followers/bookmarks $0.001/request (a full review costs under a cent), posting a text tweet $0.015, posting a tweet with a link $0.20 (X deliberately suppresses external links).
-
-1. Create a project at developer.x.com and purchase credits.
-2. On the project's Keys and tokens page, generate Consumer Keys and an Access Token (check **Read and write**).
-3. Save the four values as environment variables (ideally `~/.config/secrets/api-keys.env`):
+**1. Configure the cookie (once, lasts months)** — log in to x.com, F12 → Application → Cookies → `x.com`, copy `auth_token` and `ct0` into `~/.config/secrets/api-keys.env`:
 
 ```bash
-export X_API_KEY="..."
-export X_API_SECRET="..."
-export X_ACCESS_TOKEN="..."
-export X_ACCESS_TOKEN_SECRET="..."
+export X_AUTH_TOKEN="..."
+export X_CT0="..."
+export X_PROXY="http://127.0.0.1:7890"   # required where X is blocked
 ```
 
-4. Install the dependency: `pip3 install tweepy`.
+Then `pip3 install twscrape curl_cffi` (add `tweepy` for posting).
 
-### Cookies (free fallback: read-only)
-
-Without prepaid credits, x-content-review and x-account-audit can still read data via login cookies (x-post requires the official API; cookies cannot write):
-
-1. Log in to x.com in your browser.
-2. Press F12 to open DevTools → **Application** tab (Chrome/Edge; **Storage** in Firefox) → **Cookies** → `https://x.com`.
-3. Find the `auth_token` row and copy its **Value**; do the same for `ct0`.
-4. Save them as environment variables (ideally in a private file such as `~/.config/secrets/api-keys.env`, sourced by your shell):
-
-```bash
-export X_AUTH_TOKEN="auth_token value from step 3"
-export X_CT0="ct0 value from step 3"
-```
-
-5. Install dependencies: `pip3 install twscrape curl_cffi` (curl_cffi is required for TLS fingerprint impersonation; without it, cookie reads fail on some networks).
-6. If X is blocked on your network, set `export X_PROXY="http://127.0.0.1:7890"` (your proxy port); the scripts fall back to `HTTPS_PROXY`/`HTTP_PROXY` if unset.
-
-Treat cookies like passwords: keep them in a local private file and never commit them. Logging out of x.com invalidates them; log back in and copy again.
-
-Optional enhancement: x-content-review also consumes CSVs exported from the X Analytics dashboard (which contain net follows and profile visits, unavailable via cookies). If present, they are used automatically.
-
-## Install (Claude Code)
+**2. Install the skills**
 
 ```bash
 git clone https://github.com/anneheartrecord/x-operation-skills.git
-ln -s "$(pwd)/x-operation-skills/x-content-review" ~/.claude/skills/x-content-review
-ln -s "$(pwd)/x-operation-skills/x-account-audit" ~/.claude/skills/x-account-audit
+for s in x-content-review x-account-audit x-post x-hotspot-radar; do
+  ln -s "$(pwd)/x-operation-skills/$s" ~/.claude/skills/$s
+done
 ```
+
+**3. Use** — ask the agent "X weekly review" or "audit my X account". Reads use your cookie (free); posting uses the official pay-per-use API (text $0.015, with-link $0.20 — so x-post pools links into the thread's last tweet), always previewed before sending.
+
+## Real sample (@Charles77xixi)
+
+- **This week vs last**: 26 vs 21 posts, impressions −34%, but efficiency (bookmarks/10k views) 44.2 vs 45.1 — the drop is reach, not conversion.
+- **Category efficiency**: 投资 39.7 > 开户 31.2 > 职业 26.7 > AI 工程 14.0 > 其他 6.9. Investing/brokerage convert best, yet AI-engineering is the 2nd most posted (68) at 35% of investing's efficiency — effort and conversion are inverted.
+- **Best time slots** (UTC+8): 14–16 (67.4) and 20–22 (54.9) are prime, but the most posts land at 18–20 (54 posts, only 9.1).
+- **Account audit**: the bio is an identity-stack + capability-list double anti-pattern; the skill returns 3 ready rewrites.
+
+## Data & automation
+
+Runtime data lives in `~/.local/share/x-operation-skills/` (contains login state, deliberately kept out of git). Optional launchd jobs record follower counts daily and produce the weekly report unattended; a cookie health check warns you to reconfigure when the cookie expires.
 
 ## Methodology
 
-- Data review: bookmarks-or-follows per 10k impressions, A/B/C post grading, posting time derived from Snowflake IDs.
-- Account audit: based on the trust-and-monetization framework from *Turning Talent into Money* (Wang Mengke) and Vista8's (@vista8) X growth methodology.
+Account-audit framework from *Turning Talent into Money* (Wang Mengke) + Vista8's (@vista8) X growth methodology.
 
 ## License
 
