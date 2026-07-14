@@ -31,6 +31,20 @@ def resolve_proxy():
             or os.environ.get("HTTP_PROXY") or None)
 
 
+def is_own_unseen_post(tweet_author, username, tweet_id, seen_ids):
+    """判断一条帖是否该保留:作者是本人(大小写不敏感)且此 id 未见过。
+
+    抽成纯函数便于单测。命中时把 tweet_id 记进 seen_ids(副作用),返回 True。
+    转推在此 twscrape 版本里以原作者身份返回,作者不等于本人即被剔除。
+    """
+    if not tweet_author or tweet_author.lower() != username.lower():
+        return False
+    if str(tweet_id) in seen_ids:
+        return False
+    seen_ids.add(str(tweet_id))
+    return True
+
+
 def resolve_data_dir():
     """twscrape 状态库(accounts.db)与快照的存放目录。
 
@@ -157,11 +171,8 @@ async def fetch_recent_posts(username, limit):
         # retweetedTweet,而是直接返回原作者的 tweet 对象),转推的曝光/收藏属于原
         # 作者,算进来会把百万曝光的官方号内容误计为本账号表现,彻底污染分析。
         tweet_author = getattr(tweet.user, "username", "") if tweet.user else ""
-        if tweet_author.lower() != username.lower():
+        if not is_own_unseen_post(tweet_author, username, tweet.id, seen_ids):
             continue
-        if str(tweet.id) in seen_ids:
-            continue
-        seen_ids.add(str(tweet.id))
         posts.append({
             "id": str(tweet.id),
             "posted_at": tweet.date.isoformat(),

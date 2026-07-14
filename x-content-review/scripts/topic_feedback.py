@@ -34,8 +34,17 @@ def build_markdown(analysis):
     if categories:
         lines.append("## 类别投产建议(按转化效率)")
         lines.append("")
+        category_count = len(categories)
         for index, cat in enumerate(categories):
-            action = "⬆️ 加大投产" if index < 2 else ("⬇️ 减量或换角度" if index >= len(categories) - 1 else "维持")
+            is_last = index == category_count - 1
+            if category_count == 1:
+                action = "维持"  # 只有一类,不谈加大/减量
+            elif is_last:
+                action = "⬇️ 减量或换角度"  # 垫底类别始终降级,即便类别数少
+            elif index < 2:
+                action = "⬆️ 加大投产"
+            else:
+                action = "维持"
             lines.append(f"- **{cat['category']}**:效率 {cat.get(rate_key, 0)}(帖 {cat['posts']}) → {action}")
         lines.append("")
 
