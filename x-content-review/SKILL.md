@@ -113,6 +113,7 @@ python3 <skill目录>/scripts/fetch_x_pulse.py --user <handle> --check
 - **粉丝快照定时**:`~/.agent-harness/bin/x-follower-snapshot.sh`(launchd `com.charles.x-follower-snapshot`,每日 23:30)每天记一次粉丝数,积累后周报环比才有值。
 - **周报无人值守定时**:`~/.agent-harness/bin/run-x-weekly-report.sh`(launchd `com.charles.x-weekly-report`,周一 10:00)全自动:cookie 检查 → 拉数+分析+归档 → 调 agent-runner(claude 主 / codex 兜底,headless)按 `30-outputs/运营/_X周报生成提示词.md` 直接写出 `X周报-日期.md` 并推送总结。cookie 失效时止损 + 弹通知,不硬跑。
 - **环比**:analysis JSON 的 `content.period_comparison` 给本期 vs 上期(帖数/曝光/效率),粉丝环比需快照跨度够才有值。
+- **看板联动**:`scripts/pulse_to_dashboard.py` 把粉丝趋势 + 最新分析(类别/时段/环比/B级)刷进自媒体运营看板的 `<!-- X-PULSE -->` 标记段(收藏/万曝光口径,与看板 CSV 段的净涨粉口径并列不混)。两个定时 runner 跑完自动调它;标记缺失或看板不存在时安全跳过。
 
 ## 判断规则(硬口径)
 
