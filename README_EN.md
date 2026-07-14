@@ -13,8 +13,9 @@ A set of X (Twitter) operation skills for AI agents (Claude Code / Codex). Insta
 |---|---|---|
 | **x-content-review** | Pull your account data, find **which content and which time slots grow followers fastest**, give next-week guidance | "X weekly review" |
 | **x-account-audit** | Audit bio / pinned / avatar / banner, hand back ready-to-use rewrites | "audit my X account" |
-| **x-post** | Post via the official API with a cost preview and confirmation; auto-splits long form into a thread | "post this to X" |
 | **x-hotspot-radar** | Scan hot topics → filter → draft a tweet in your voice, de-AI'd, with images | "what to post today" |
+| **x-post-gate** | Pre-publish gate against your "don't-post" rules: four-question veto + blacklist, returns post/rework/drop | "should I post this" |
+| **x-post** | Post via the official API with a cost preview and confirmation; auto-splits long form into a thread | "post this to X" |
 
 Also included: daily follower snapshot + **unattended weekly report** (launchd), benchmark tracking, topic-library loop, and cookie health check.
 
@@ -34,7 +35,7 @@ Then `pip3 install twscrape curl_cffi` (add `tweepy` for posting).
 
 ```bash
 git clone https://github.com/anneheartrecord/x-operation-skills.git
-for s in x-content-review x-account-audit x-post x-hotspot-radar; do
+for s in x-content-review x-account-audit x-hotspot-radar x-post-gate x-post; do
   ln -s "$(pwd)/x-operation-skills/$s" ~/.claude/skills/$s
 done
 ```
@@ -54,10 +55,10 @@ Runtime data lives in `~/.local/share/x-operation-skills/` (contains login state
 
 ## Full pipeline: from idea to posted to reviewed
 
-Two layers. The **operation layer** (the 4 skills here) handles data and posting; the **content layer** is a set of separate skills (writing voice / cover / title / de-AI / illustrations) that `x-hotspot-radar` orchestrates automatically:
+Two layers. The **operation layer** (the 5 skills here) handles data and posting; the **content layer** is a set of separate skills (writing voice / cover / title / de-AI / illustrations) that `x-hotspot-radar` orchestrates automatically:
 
 ```
-topic → writing (personal voice) → de-AI → title (search terms) → cover (emotional hook) → images → post → review → audit
+topic → writing (personal voice) → de-AI → title (search terms) → cover (emotional hook) → images → post-gate → post → review → audit
 ```
 
 The content-layer skills live locally (the writing voice contains personal style); the operation layer is this repo. Say "what to post today" and x-hotspot-radar runs the whole chain.

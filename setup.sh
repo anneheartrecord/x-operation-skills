@@ -13,7 +13,7 @@ SECRETS_FILE="$HOME/.config/secrets/api-keys.env"
 CHECK_ONLY=0
 [[ "${1:-}" == "--check" ]] && CHECK_ONLY=1
 
-OPS_SKILLS=(x-content-review x-account-audit x-post x-hotspot-radar)
+OPS_SKILLS=(x-content-review x-account-audit x-hotspot-radar x-post-gate x-post)
 CONTENT_SKILLS=(cover-image xhs-title xhs-keyword-strategy)
 
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -61,7 +61,7 @@ for root in "$HOME/.claude/skills" "$HOME/.codex/skills"; do
   for s in "${OPS_SKILLS[@]}";     do link_skill "$REPO_DIR/$s" "$s" "$root"; done
   for s in "${CONTENT_SKILLS[@]}"; do link_skill "$REPO_DIR/content-generation/$s" "$s" "$root"; done
 done
-[[ $CHECK_ONLY -eq 0 ]] && ok "7 个 skill 已软链到存在的 Claude/Codex 目录"
+[[ $CHECK_ONLY -eq 0 ]] && ok "8 个 skill 已软链到存在的 Claude/Codex 目录"
 
 # 3) 凭证/代理待配项检查(不打印敏感值)
 echo "凭证与代理检查..."

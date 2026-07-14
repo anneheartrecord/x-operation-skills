@@ -13,19 +13,20 @@
 |---|---|---|
 | **x-content-review** | 拉自己账号数据,算出**什么内容、什么时段涨粉最快**,给下周发帖建议 | 「出X周报」 |
 | **x-account-audit** | 体检 bio / 置顶 / 头像 / 封面,直接给能替换的改写稿 | 「诊断我的X账号」 |
-| **x-post** | 官方 API 发帖,发前预览内容和费用,确认才发;长文自动拆 thread | 「把这条发到X」 |
 | **x-hotspot-radar** | 扫热点 → 过滤 → 写成符合你文风、去过 AI 味、配好图的推文草稿 | 「今天发什么」 |
+| **x-post-gate** | 发前用你的「不发原则」自检:四问一票否决 + 不发清单,给出发/打回改/不发裁决 | 「这条该发吗」 |
+| **x-post** | 官方 API 发帖,发前预览内容和费用,确认才发;长文自动拆 thread | 「把这条发到X」 |
 
 配套还有:粉丝快照 + 周报**每周自动出稿**(launchd 定时)、对标账号追踪、选题库回环、cookie 健康检查。
 
 ## 完整流程:从一个想法到发出去、再到复盘
 
-这套包分两层。**运营层**(本仓库 4 个 skill)管数据和发布;**内容生成层**是一组独立 skill(写作系统 / 封面 / 标题 / 去 AI 味 / 配图),`x-hotspot-radar` 会**自动编排**它们,不重造。完整链路:
+这套包分两层。**运营层**(本仓库 5 个 skill)管数据和发布;**内容生成层**是一组独立 skill(写作系统 / 封面 / 标题 / 去 AI 味 / 配图),`x-hotspot-radar` 会**自动编排**它们,不重造。完整链路:
 
 ```
-选题/对标 → 写作(个人文风) → 去 AI 味 → 标题(搜索关键词) → 封面(情绪钩子) → 配图 → 发布 → 复盘 → 账号诊断
-   ↑对标追踪      ↑writing-style       ↑de-ai-flavor   ↑xhs-title       ↑cover-image  ↑插图    ↑x-post  ↑x-content  ↑x-account
-   (本仓库)                                                                                              -review    -audit
+选题/对标 → 写作(个人文风) → 去 AI 味 → 标题(搜索关键词) → 封面(情绪钩子) → 配图 → 发帖自检 → 发布 → 复盘 → 账号诊断
+   ↑对标追踪    ↑writing-style   ↑de-ai-flavor  ↑xhs-title      ↑cover-image  ↑插图  ↑x-post-gate ↑x-post ↑x-content ↑x-account
+   (本仓库)                                                                                                    -review   -audit
 ```
 
 | 阶段 | 用什么 | 归属 |
@@ -36,6 +37,7 @@
 | 标题(覆盖搜索词) | `xhs-title` / `xhs-keyword-strategy` | 本仓库 [`content-generation/`](./content-generation/) |
 | 封面(情绪钩子) | `cover-image` | 本仓库 [`content-generation/`](./content-generation/) |
 | 正文配图 | `ian-xiaohei-illustrations`、`guizang-material-illustration` | 本地 |
+| 发帖自检(该不该发) | `x-post-gate` | 本仓库(运营层) |
 | 发布 | `x-post` | 本仓库(运营层) |
 | 复盘 / 诊断 | `x-content-review`、`x-account-audit` | 本仓库(运营层) |
 
@@ -61,11 +63,11 @@
 ```bash
 git clone https://github.com/anneheartrecord/x-operation-skills.git
 cd x-operation-skills
-./setup.sh          # 建 venv + 装依赖 + 软链 7 个 skill 到 Claude/Codex
+./setup.sh          # 建 venv + 装依赖 + 软链 8 个 skill 到 Claude/Codex
 ./setup.sh --check  # 随时自检:依赖/软链/凭证待配项一目了然(不改动)
 ```
 
-`setup.sh` 幂等可重跑;会软链运营层 4 个 + 内容生成层 3 个 skill,并检查 cookie/代理/官方 API 凭证是否配齐。
+`setup.sh` 幂等可重跑;会软链运营层 5 个 + 内容生成层 3 个 skill,并检查 cookie/代理/官方 API 凭证是否配齐。
 
 **第三步:用**——对 agent 说「出X周报」「诊断我的X账号」即可。数据都是读你自己账号的公开指标(cookie),发帖走官方 API(按量计费,发前确认)。
 
