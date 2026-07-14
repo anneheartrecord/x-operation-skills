@@ -97,11 +97,21 @@ python3 <skill目录>/scripts/track_benchmarks.py --handles vista8,zarazhangrui 
 
 输出各对标的粉丝、发帖频率(帖/天)、中位/均曝光、Top 帖。用来校准自己的发帖节奏和选题,不是抄内容。
 
+## cookie 健康检查
+
+跑任何 cookie 路径前,可先验证登录态(定时 runner 已内置此检查):
+
+```bash
+python3 <skill目录>/scripts/fetch_x_pulse.py --user <handle> --check
+```
+
+有效退出 0(打印粉丝数已过鉴权门);cookie 失效退出 1 并提示重新复制 cookie;代理/网络异常退出 1 并提示检查 X_PROXY。它打一个鉴权门后端点(401=失效),不是公开端点,能真正区分登录态失效 vs 只是可达。**注意**:build_api 每次先删后加账号,保证 `~/.config/secrets/api-keys.env` 里刚更新的 cookie 立即生效(twscrape 的 add_account 遇已存在账号不会刷新 cookie)。
+
 ## 数据落盘与自动化
 
 - **数据目录**:`~/.local/share/x-operation-skills/`(可用 `X_SKILLS_DATA_DIR` 覆盖)。twscrape 状态库 `accounts.db`、粉丝快照 `x-follower-snapshots.jsonl`、分析 JSON 都在这——**刻意不放知识库运营目录**,因 accounts.db 含登录态,避免误提交。
 - **粉丝快照定时**:`~/.agent-harness/bin/x-follower-snapshot.sh`(launchd `com.charles.x-follower-snapshot`,每日 23:30)每天记一次粉丝数,积累后周报环比才有值。
-- **周报备数据定时**:`~/.agent-harness/bin/x-weekly-report-prep.sh`(launchd `com.charles.x-weekly-report-prep`,周一 10:00)自动拉数 + 分析 + 归档旧 JSON,叙事周报仍由 agent 基于 JSON 写(prose 需 LLM)。
+- **周报无人值守定时**:`~/.agent-harness/bin/run-x-weekly-report.sh`(launchd `com.charles.x-weekly-report`,周一 10:00)全自动:cookie 检查 → 拉数+分析+归档 → 调 agent-runner(claude 主 / codex 兜底,headless)按 `30-outputs/运营/_X周报生成提示词.md` 直接写出 `X周报-日期.md` 并推送总结。cookie 失效时止损 + 弹通知,不硬跑。
 - **环比**:analysis JSON 的 `content.period_comparison` 给本期 vs 上期(帖数/曝光/效率),粉丝环比需快照跨度够才有值。
 
 ## 判断规则(硬口径)

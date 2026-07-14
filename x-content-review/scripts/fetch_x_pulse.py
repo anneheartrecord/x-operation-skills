@@ -105,12 +105,14 @@ async def build_api(username):
     patch_xclid_proxy(proxy)
     api = API(os.path.join(resolve_data_dir(), "accounts.db"), proxy=proxy)
     cookie_string = f"auth_token={auth_token}; ct0={ct0}"
-    # twscrape 以「账号池」组织登录态;注入单个 cookie 账号(已存在则忽略),再标记 active
+    # twscrape 的 add_account 遇已存在账号会 no-op,不会刷新 cookie。为保证 env 里
+    # 当前(可能刚更新过)的 cookie 一定生效,先删后加。单账号日/周跑,丢失限流状态可忽略。
     try:
-        await api.pool.add_account(username, "-", "-", "-",
-                                   cookies=cookie_string, proxy=proxy)
-    except Exception:  # 账号已存在等非致命情况,继续用池里的
+        await api.pool.delete_accounts([username])
+    except Exception:  # 账号不存在等,忽略
         pass
+    await api.pool.add_account(username, "-", "-", "-",
+                              cookies=cookie_string, proxy=proxy)
     await api.pool.set_active(username, True)
     return api
 
@@ -176,6 +178,46 @@ async def fetch_recent_posts(username, limit):
     return {"user": username, "followers": user.followersCount, "posts": posts}
 
 
+# X web app 的公开 bearer(所有网页客户端共用的常量),鉴权靠 cookie 而非它
+_X_WEB_BEARER = ("AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs"
+                 "%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA")
+
+
+def check_cookie():
+    """cookie 健康检查,返回 (ok, 说明)。真正测鉴权,不测公开可达性。
+
+    公开端点(如 UserByScreenName)用无效 cookie 也能返回,不能用来判活;这里打一个
+    鉴权门后端点:401(code 32 Could not authenticate)= cookie 失效;连接异常 = 代理/网络
+    问题;其余(200/404 等已过鉴权)= cookie 有效。
+    """
+    from curl_cffi import requests
+
+    auth_token = os.environ.get("X_AUTH_TOKEN", "")
+    ct0 = os.environ.get("X_CT0", "")
+    if not auth_token or not ct0:
+        return False, "缺少 X_AUTH_TOKEN / X_CT0 环境变量,先按 README 配置 cookie。"
+
+    proxy = resolve_proxy()
+    headers = {
+        "authorization": f"Bearer {_X_WEB_BEARER}",
+        "x-csrf-token": ct0,
+        "cookie": f"auth_token={auth_token}; ct0={ct0}",
+        "x-twitter-auth-type": "OAuth2Session",
+        "x-twitter-active-user": "yes",
+    }
+    try:
+        response = requests.get("https://api.x.com/1.1/account/settings.json",
+                                headers=headers, proxy=proxy, timeout=15,
+                                impersonate="chrome")
+    except Exception as error:  # 连接/代理层异常
+        return False, (f"网络或代理异常:{type(error).__name__}: {error}。"
+                       "检查 X_PROXY(如 http://127.0.0.1:7890)是否可用。")
+    if response.status_code == 401:
+        return False, ("cookie 已失效(登出或改密)。重新登录 x.com,按 README 重新复制 "
+                       "auth_token 和 ct0 到 ~/.config/secrets/api-keys.env。")
+    return True, f"cookie 有效(鉴权端点返回 {response.status_code},已过鉴权门)。"
+
+
 def append_follower_snapshot(snapshot_path, followers):
     """把当日粉丝数快照追加到 JSONL(同一天已有记录则覆盖为最新值)。"""
     from datetime import date
@@ -200,13 +242,20 @@ def main():
                         help="只拉主页信息(bio/头像/banner/置顶帖),供账号诊断用")
     parser.add_argument("--download-media",
                         help="配合 --profile:把头像/banner 下载到该目录,返回本地路径供看图")
+    parser.add_argument("--check", action="store_true",
+                        help="cookie 健康检查:有效打印 OK 退出 0,失效/网络异常打印原因退出 1")
     args = parser.parse_args()
 
     try:
         import twscrape  # noqa: F401
     except ImportError:
-        print("错误:未安装 twscrape,先执行 pip3 install twscrape", file=sys.stderr)
+        print("错误:未安装 twscrape,先执行 pip3 install twscrape curl_cffi", file=sys.stderr)
         sys.exit(1)
+
+    if args.check:
+        ok, message = check_cookie()
+        print(("OK: " if ok else "FAIL: ") + message, file=sys.stderr)
+        sys.exit(0 if ok else 1)
 
     if args.profile:
         result = asyncio.run(fetch_profile(args.user))
