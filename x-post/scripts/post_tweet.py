@@ -31,11 +31,17 @@ def estimate_cost(text):
     return ("$0.20(含链接,13 倍溢价)" if has_url else "$0.015(纯文字)"), has_url
 
 
+def missing_credentials(env=None):
+    """返回缺失的 OAuth 环境变量列表(纯函数,便于单测)。"""
+    source = env if env is not None else os.environ
+    return [key for key in REQUIRED_ENV_KEYS if not source.get(key)]
+
+
 def build_client():
     """校验四个 OAuth 环境变量并构造 tweepy Client。"""
     import tweepy
 
-    missing_keys = [key for key in REQUIRED_ENV_KEYS if not os.environ.get(key)]
+    missing_keys = missing_credentials()
     if missing_keys:
         print(f"错误:缺少环境变量 {', '.join(missing_keys)}。\n"
               "到 developer.x.com 生成 Consumer Keys 和 Access Token(Read and write),\n"
@@ -48,6 +54,21 @@ def build_client():
         access_token=os.environ["X_ACCESS_TOKEN"],
         access_token_secret=os.environ["X_ACCESS_TOKEN_SECRET"],
     )
+
+
+def check_credentials():
+    """发帖凭证自检,返回 (ok, 说明)。写路径需 Read and write 权限。"""
+    missing_keys = missing_credentials()
+    if missing_keys:
+        return False, (f"缺少环境变量 {', '.join(missing_keys)}。到 developer.x.com "
+                       "生成 Consumer Keys + Access Token(务必勾 Read and write)存入 api-keys.env。")
+    try:
+        client = build_client()
+        me = client.get_me().data
+    except Exception as error:
+        return False, (f"凭证鉴权失败:{type(error).__name__}: {error}。"
+                       "确认 Access Token 权限是 Read and write、未过期。")
+    return True, f"发帖凭证有效,@{me.username}(具备发帖权限,发布仍需 --yes 确认)。"
 
 
 def post_thread(thread_plan, confirmed):
@@ -83,7 +104,14 @@ def main():
     parser.add_argument("--thread-file", help="split_thread.py 生成的 thread plan JSON(thread 模式)")
     parser.add_argument("--reply-to", help="要回复的帖子 id(可选)")
     parser.add_argument("--yes", action="store_true", help="确认发布;不带此参数只做预览")
+    parser.add_argument("--check", action="store_true",
+                        help="凭证自检:验证发帖凭证有效(不发帖),失败退出 1 并给提示")
     args = parser.parse_args()
+
+    if args.check:
+        ok, message = check_credentials()
+        print(("OK: " if ok else "FAIL: ") + message, file=sys.stderr)
+        sys.exit(0 if ok else 1)
 
     if args.thread_file:
         with open(args.thread_file, encoding="utf-8") as plan_file:

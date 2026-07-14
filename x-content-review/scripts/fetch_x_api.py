@@ -27,11 +27,17 @@ from fetch_x_pulse import append_follower_snapshot
 REQUIRED_ENV_KEYS = ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]
 
 
+def missing_credentials(env=None):
+    """返回缺失的 OAuth 环境变量列表(纯函数,便于单测)。"""
+    source = env if env is not None else os.environ
+    return [key for key in REQUIRED_ENV_KEYS if not source.get(key)]
+
+
 def build_client():
     """校验四个 OAuth 环境变量并构造 tweepy Client。"""
     import tweepy
 
-    missing_keys = [key for key in REQUIRED_ENV_KEYS if not os.environ.get(key)]
+    missing_keys = missing_credentials()
     if missing_keys:
         print(f"错误:缺少环境变量 {', '.join(missing_keys)}。\n"
               "到 developer.x.com 的项目 Keys and tokens 页生成 Consumer Keys 和\n"
@@ -44,6 +50,21 @@ def build_client():
         access_token=os.environ["X_ACCESS_TOKEN"],
         access_token_secret=os.environ["X_ACCESS_TOKEN_SECRET"],
     )
+
+
+def check_credentials():
+    """凭证自检,返回 (ok, 说明)。缺变量→提示配置;鉴权失败→提示重新生成 token。"""
+    missing_keys = missing_credentials()
+    if missing_keys:
+        return False, (f"缺少环境变量 {', '.join(missing_keys)}。到 developer.x.com "
+                       "生成 Consumer Keys + Access Token(Read and write)存入 api-keys.env。")
+    try:
+        client = build_client()
+        me = client.get_me(user_fields=["public_metrics"]).data
+    except Exception as error:  # 鉴权/网络异常
+        return False, (f"凭证鉴权失败:{type(error).__name__}: {error}。"
+                       "检查 token 是否过期或权限是否为 Read and write。")
+    return True, f"官方 API 凭证有效,@{me.username}。"
 
 
 def fetch_own_posts(limit):
@@ -84,6 +105,8 @@ def main():
     parser = argparse.ArgumentParser(description="X 官方 API 拉自己账号数据(按量计费)")
     parser.add_argument("--limit", type=int, default=100, help="拉取帖子数上限(默认 100)")
     parser.add_argument("--snapshot-file", help="粉丝数快照 JSONL 路径(可选,用于算周环比涨粉)")
+    parser.add_argument("--check", action="store_true",
+                        help="凭证自检:有效退出 0,缺变量/鉴权失败退出 1 并给可操作提示")
     args = parser.parse_args()
 
     try:
@@ -91,6 +114,11 @@ def main():
     except ImportError:
         print("错误:未安装 tweepy,先执行 pip3 install tweepy", file=sys.stderr)
         sys.exit(1)
+
+    if args.check:
+        ok, message = check_credentials()
+        print(("OK: " if ok else "FAIL: ") + message, file=sys.stderr)
+        sys.exit(0 if ok else 1)
 
     result = fetch_own_posts(args.limit)
     if args.snapshot_file:

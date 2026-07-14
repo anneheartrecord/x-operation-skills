@@ -24,6 +24,8 @@ export X_ACCESS_TOKEN_SECRET="..."
 
 依赖:`pip3 install tweepy`。计费为预充值信用点、按请求扣费、无订阅。
 
+**先自检再用**:`python3 <skill目录>/scripts/post_tweet.py --check` 验证凭证(缺变量/权限不足/过期会 FAIL 并给提示,不发帖)。⚠️ **发帖写路径尚未在真实凭证下端到端验证过**(需用户配好凭证后自测一次首发);dry-run 预览与拆分逻辑已测。
+
 ## 工作流程(硬性顺序,不可跳步)
 
 ### 第 1 步:dry-run 预览
