@@ -18,6 +18,29 @@
 
 配套还有:粉丝快照 + 周报**每周自动出稿**(launchd 定时)、对标账号追踪、选题库回环、cookie 健康检查。
 
+## 完整流程:从一个想法到发出去、再到复盘
+
+这套包分两层。**运营层**(本仓库 4 个 skill)管数据和发布;**内容生成层**是一组独立 skill(写作系统 / 封面 / 标题 / 去 AI 味 / 配图),`x-hotspot-radar` 会**自动编排**它们,不重造。完整链路:
+
+```
+选题/对标 → 写作(个人文风) → 去 AI 味 → 标题(搜索关键词) → 封面(情绪钩子) → 配图 → 发布 → 复盘 → 账号诊断
+   ↑对标追踪      ↑writing-style       ↑de-ai-flavor   ↑xhs-title       ↑cover-image  ↑插图    ↑x-post  ↑x-content  ↑x-account
+   (本仓库)                                                                                              -review    -audit
+```
+
+| 阶段 | 用什么 | 归属 |
+|---|---|---|
+| 选题 / 对标 | `track_benchmarks.py`、复盘的选题库回环 | 本仓库 |
+| 写作(个人文风) | 写作系统(writing-style 三件套) | 内容生成层(本地) |
+| 去 AI 味 | `de-ai-flavor` | 内容生成层(本地) |
+| 标题(覆盖搜索词) | `xhs-title` / `xhs-keyword-strategy` | 内容生成层(本地) |
+| 封面(情绪钩子) | `cover-image` | 内容生成层(本地) |
+| 正文配图 | `ian-xiaohei-illustrations`、`guizang-material-illustration` | 内容生成层(本地) |
+| 发布 | `x-post` | 本仓库 |
+| 复盘 / 诊断 | `x-content-review`、`x-account-audit` | 本仓库 |
+
+> 「封面给人看(情绪钩子拿点击)、标题给机器看(覆盖搜索词拿长尾)」是两条分开的线,别混。热点做推文时说「今天发什么」,`x-hotspot-radar` 会把上面这条链路串起来跑。
+
 ## 怎么用
 
 **第一步:配 cookie(一次,几个月不用换)**
@@ -73,6 +96,10 @@ done
 ## 方法论来源
 
 账号诊断框架来自《把才华变成钱》(王梦珂)+ 向阳乔木(@vista8)的 X 增长方法论。
+
+## 作者
+
+Charles 在路上 · [x.com/Charles77xixi](https://x.com/Charles77xixi)(这套 skill 就是我自己运营这个号用的)
 
 ## License
 

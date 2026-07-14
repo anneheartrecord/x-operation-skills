@@ -52,9 +52,23 @@ done
 
 Runtime data lives in `~/.local/share/x-operation-skills/` (contains login state, deliberately kept out of git). Optional launchd jobs record follower counts daily and produce the weekly report unattended; a cookie health check warns you to reconfigure when the cookie expires.
 
+## Full pipeline: from idea to posted to reviewed
+
+Two layers. The **operation layer** (the 4 skills here) handles data and posting; the **content layer** is a set of separate skills (writing voice / cover / title / de-AI / illustrations) that `x-hotspot-radar` orchestrates automatically:
+
+```
+topic → writing (personal voice) → de-AI → title (search terms) → cover (emotional hook) → images → post → review → audit
+```
+
+The content-layer skills live locally (the writing voice contains personal style); the operation layer is this repo. Say "what to post today" and x-hotspot-radar runs the whole chain.
+
 ## Methodology
 
 Account-audit framework from *Turning Talent into Money* (Wang Mengke) + Vista8's (@vista8) X growth methodology.
+
+## Author
+
+Charles · [x.com/Charles77xixi](https://x.com/Charles77xixi) — this toolkit runs my own account.
 
 ## License
 
