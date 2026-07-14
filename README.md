@@ -56,20 +56,16 @@
    ```
 3. 装依赖:`pip3 install twscrape curl_cffi`(发帖还需 `tweepy`)。
 
-**第二步:装 skill**
+**第二步:一键部署**
 
 ```bash
 git clone https://github.com/anneheartrecord/x-operation-skills.git
 cd x-operation-skills
-# 运营层
-for s in x-content-review x-account-audit x-post x-hotspot-radar; do
-  ln -s "$(pwd)/$s" ~/.claude/skills/$s
-done
-# 内容生成层(封面 + 标题)
-for s in cover-image xhs-title xhs-keyword-strategy; do
-  ln -s "$(pwd)/content-generation/$s" ~/.claude/skills/$s
-done
+./setup.sh          # 建 venv + 装依赖 + 软链 7 个 skill 到 Claude/Codex
+./setup.sh --check  # 随时自检:依赖/软链/凭证待配项一目了然(不改动)
 ```
+
+`setup.sh` 幂等可重跑;会软链运营层 4 个 + 内容生成层 3 个 skill,并检查 cookie/代理/官方 API 凭证是否配齐。
 
 **第三步:用**——对 agent 说「出X周报」「诊断我的X账号」即可。数据都是读你自己账号的公开指标(cookie),发帖走官方 API(按量计费,发前确认)。
 
