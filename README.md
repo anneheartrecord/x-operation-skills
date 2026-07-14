@@ -30,14 +30,16 @@
 
 | 阶段 | 用什么 | 归属 |
 |---|---|---|
-| 选题 / 对标 | `track_benchmarks.py`、复盘的选题库回环 | 本仓库 |
-| 写作(个人文风) | 写作系统(writing-style 三件套) | 内容生成层(本地) |
-| 去 AI 味 | `de-ai-flavor` | 内容生成层(本地) |
-| 标题(覆盖搜索词) | `xhs-title` / `xhs-keyword-strategy` | 内容生成层(本地) |
-| 封面(情绪钩子) | `cover-image` | 内容生成层(本地) |
-| 正文配图 | `ian-xiaohei-illustrations`、`guizang-material-illustration` | 内容生成层(本地) |
-| 发布 | `x-post` | 本仓库 |
-| 复盘 / 诊断 | `x-content-review`、`x-account-audit` | 本仓库 |
+| 选题 / 对标 | `track_benchmarks.py`、复盘的选题库回环 | 本仓库(运营层) |
+| 写作(个人文风) | 写作系统(writing-style 三件套) | 本地(个人 IP,不公开) |
+| 去 AI 味 | `de-ai-flavor` | 本地 |
+| 标题(覆盖搜索词) | `xhs-title` / `xhs-keyword-strategy` | 本仓库 [`content-generation/`](./content-generation/) |
+| 封面(情绪钩子) | `cover-image` | 本仓库 [`content-generation/`](./content-generation/) |
+| 正文配图 | `ian-xiaohei-illustrations`、`guizang-material-illustration` | 本地 |
+| 发布 | `x-post` | 本仓库(运营层) |
+| 复盘 / 诊断 | `x-content-review`、`x-account-audit` | 本仓库(运营层) |
+
+> 通用的封面和标题 skill 收进了本仓库 [`content-generation/`](./content-generation/);个人写作文风(含镇库范文)是个人 IP,留本地由 `x-hotspot-radar` 引用,不公开。
 
 > 「封面给人看(情绪钩子拿点击)、标题给机器看(覆盖搜索词拿长尾)」是两条分开的线,别混。热点做推文时说「今天发什么」,`x-hotspot-radar` 会把上面这条链路串起来跑。
 
@@ -58,8 +60,14 @@
 
 ```bash
 git clone https://github.com/anneheartrecord/x-operation-skills.git
+cd x-operation-skills
+# 运营层
 for s in x-content-review x-account-audit x-post x-hotspot-radar; do
-  ln -s "$(pwd)/x-operation-skills/$s" ~/.claude/skills/$s
+  ln -s "$(pwd)/$s" ~/.claude/skills/$s
+done
+# 内容生成层(封面 + 标题)
+for s in cover-image xhs-title xhs-keyword-strategy; do
+  ln -s "$(pwd)/content-generation/$s" ~/.claude/skills/$s
 done
 ```
 
