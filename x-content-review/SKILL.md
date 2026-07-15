@@ -23,7 +23,7 @@ API 和 pulse 模式的涨粉趋势都靠粉丝数快照 JSONL 差值(每次跑�
 
 ### 第 1 步:选数据路径
 
-- 先看用户运营目录(惯例 `30-outputs/运营/`)有无 7 天内导出的 CSV 对:有 → CSV 模式;
+- 先看用户运营目录(惯例 `30-outputs/X 运营/`)有无 7 天内导出的 CSV 对:有 → CSV 模式;
 - 没有,四个 API env 齐 → API 模式:
 
 ```bash
@@ -67,9 +67,11 @@ python3 <skill目录>/scripts/analyze_x_data.py \
 2. **时段结论**:哪个北京时间段「涨粉/万曝光」最高。注意剔除单帖爆款扭曲——若某时段数据由 1-2 条爆款贡献,要指出样本量问题,不要直接下结论。
 3. **类别结论**:各类别涨粉效率排名,对照历史基准线,指出漂移。
 4. **单帖分级**:A 级(扩成系列)、B 级(换头重发,列出候选)、C 级(停掉的选题方向)。
+> **口径修订（2026-07-15）**：①curation 类目样本量常很小（少数爆款撑均值），报类别排名时标注样本数，别把小样本均值当稳定规律。②**变现帖（开户 / affiliate）不进 A/B/C 涨粉分级**——它不为涨粉、为 affiliate 转化，按涨粉效率会被误判成 C 停掉；变现帖单独看转化价值。
+
 5. **下周指导**:发什么(3-5 个具体选题方向,可对照选题库)、什么时段发、避免什么。
 
-报告落盘到用户运营目录(如 `30-outputs/运营/`),命名 `X周报-YYYY-MM-DD.md`。
+报告落盘到用户运营目录(如 `30-outputs/X 运营/`),命名 `X周报-YYYY-MM-DD.md`。
 
 ### 第 4 步:选题库回环(可选)
 
@@ -111,7 +113,7 @@ python3 <skill目录>/scripts/fetch_x_pulse.py --user <handle> --check
 
 - **数据目录**:`~/.local/share/x-operation-skills/`(可用 `X_SKILLS_DATA_DIR` 覆盖)。twscrape 状态库 `accounts.db`、粉丝快照 `x-follower-snapshots.jsonl`、分析 JSON 都在这——**刻意不放知识库运营目录**,因 accounts.db 含登录态,避免误提交。
 - **粉丝快照定时**:`~/.agent-harness/bin/x-follower-snapshot.sh`(launchd `com.charles.x-follower-snapshot`,每日 23:30)每天记一次粉丝数,积累后周报环比才有值。
-- **周报无人值守定时**:`~/.agent-harness/bin/run-x-weekly-report.sh`(launchd `com.charles.x-weekly-report`,周一 10:00)全自动:cookie 检查 → 拉数+分析+归档 → 调 agent-runner(claude 主 / codex 兜底,headless)按 `30-outputs/运营/_X周报生成提示词.md` 直接写出 `X周报-日期.md` 并推送总结。cookie 失效时止损 + 弹通知,不硬跑。
+- **周报无人值守定时**:`~/.agent-harness/bin/run-x-weekly-report.sh`(launchd `com.charles.x-weekly-report`,周一 10:00)全自动:cookie 检查 → 拉数+分析+归档 → 调 agent-runner(claude 主 / codex 兜底,headless)按 `30-outputs/X 运营/_X周报生成提示词.md` 直接写出 `X周报-日期.md` 并推送总结。cookie 失效时止损 + 弹通知,不硬跑。
 - **环比**:analysis JSON 的 `content.period_comparison` 给本期 vs 上期(帖数/曝光/效率),粉丝环比需快照跨度够才有值。
 - **看板联动**:`scripts/pulse_to_dashboard.py` 把粉丝趋势 + 最新分析(类别/时段/环比/B级)刷进自媒体运营看板的 `<!-- X-PULSE -->` 标记段(收藏/万曝光口径,与看板 CSV 段的净涨粉口径并列不混)。两个定时 runner 跑完自动调它;标记缺失或看板不存在时安全跳过。
 
