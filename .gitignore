@@ -4,3 +4,4 @@ __pycache__/
 accounts.db
 x-follower-snapshots.jsonl
 .DS_Store
+*.bak

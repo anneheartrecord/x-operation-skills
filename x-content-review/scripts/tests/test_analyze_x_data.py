@@ -69,3 +69,38 @@ def test_period_comparison_follower_delta_none_without_snapshots():
     result = compute_period_comparison([], window_days=7, today=today, follower_trend=[])
     assert result["follower_delta"] is None
     assert result["follower_delta_note"]
+
+
+def _pulse_post(hour, category, views, bookmarks, likes=0, in_window=False):
+    return {"hour": hour, "category": category, "views": views,
+            "bookmarks": bookmarks, "likes": likes, "in_window": in_window}
+
+
+def test_build_slot_category_tables_separates_reply():
+    """时段表只统计原创;类别表含 reply 单列。"""
+    from analyze_x_data import build_slot_category_tables
+    posts = [
+        _pulse_post(21, "投资", 1000, 10),
+        _pulse_post(21, "reply", 500, 1),
+    ]
+    slot_stats, category_stats = build_slot_category_tables(posts)
+    assert slot_stats["20-22"]["posts"] == 1          # reply 不进时段
+    assert slot_stats["20-22"]["views"] == 1000
+    assert category_stats["reply"]["posts"] == 1      # reply 在类别表单列
+    assert category_stats["投资"]["bookmarks"] == 10
+
+
+def test_quote_repost_candidates_pick_low_views_high_rates():
+    """低曝光但收藏比/赞比双高的帖入选;高曝光或低互动的不入选。"""
+    from analyze_x_data import find_quote_repost_candidates
+    background = [_pulse_post(10, "其他", 1000, 1, likes=1) for _ in range(6)]
+    hidden_gem = _pulse_post(21, "投资", 500, 10, likes=8)     # 双高 + 低曝光
+    big_hit = _pulse_post(21, "投资", 50000, 100, likes=80)    # 高曝光,不该入选
+    low_interaction = _pulse_post(21, "其他", 400, 1, likes=1)  # 绝对量不足
+    posts = background + [hidden_gem, big_hit, low_interaction]
+    result = find_quote_repost_candidates(posts, median_views=1000)
+    texts = [(p["views"], p["bookmarks"]) for p in result]
+    assert (500, 10) in texts
+    assert (50000, 100) not in texts
+    assert (400, 1) not in texts
+    assert result[0]["bookmarks_per_10k_views"] == 200.0

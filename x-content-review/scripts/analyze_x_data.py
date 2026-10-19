@@ -139,6 +139,7 @@ def analyze_content(content_rows, window_days, today, category_keywords):
             "hour": posted_at.hour,
             "weekday": posted_at.strftime("%a"),
             "text": re.sub(r"\s+", " ", row.get("Post text", ""))[:60],
+            "text_len": len(row.get("Post text", "")),
             "link": row.get("Post Link", ""),
             "impressions": to_int(row.get("Impressions")),
             "likes": to_int(row.get("Likes")),
@@ -246,9 +247,66 @@ def compute_period_comparison(posts, window_days, today, follower_trend):
     }
 
 
+def build_slot_category_tables(posts):
+    """给定帖子列表,聚合时段表(仅原创)与类别表(reply 单列)。
+
+    返回 (slot_stats, category_stats),均为 defaultdict(label -> {posts, views, bookmarks})。
+    """
+    slot_stats = defaultdict(lambda: {"posts": 0, "views": 0, "bookmarks": 0})
+    category_stats = defaultdict(lambda: {"posts": 0, "views": 0, "bookmarks": 0})
+    for post in posts:
+        if post["category"] != "reply":
+            slot_label = f"{post['hour'] // 2 * 2:02d}-{post['hour'] // 2 * 2 + 2:02d}"
+            slot_stats[slot_label]["posts"] += 1
+            slot_stats[slot_label]["views"] += post["views"]
+            slot_stats[slot_label]["bookmarks"] += post["bookmarks"]
+        category_stats[post["category"]]["posts"] += 1
+        category_stats[post["category"]]["views"] += post["views"]
+        category_stats[post["category"]]["bookmarks"] += post["bookmarks"]
+    return slot_stats, category_stats
+
+
+def find_quote_repost_candidates(original_posts, median_views, limit=10):
+    """挑出「高收藏比 + 高赞比,但曝光低」的帖子:适合 quote/repost 二次分发。
+
+    口径:曝光低于全量中位数;收藏/万曝光与点赞/万曝光都 ≥ 全量(曝光≥200 样本)
+    中位数的 1.5 倍;并设绝对下限(收藏≥2 且点赞≥3)排除小样本噪声。
+    按收藏比降序取前 limit 条。
+    """
+    rate_pool = [p for p in original_posts if p["views"] >= 200]
+    if not rate_pool:
+        return []
+
+    def median_of(rate_values):
+        """取列表中位数(列表已保证非空)。"""
+        ordered = sorted(rate_values)
+        return ordered[len(ordered) // 2]
+
+    median_bookmark_rate = median_of([p["bookmarks"] / p["views"] * 10000 for p in rate_pool])
+    median_like_rate = median_of([p["likes"] / p["views"] * 10000 for p in rate_pool])
+    bookmark_bar = max(median_bookmark_rate * 1.5, 1.0)
+    like_bar = max(median_like_rate * 1.5, 1.0)
+
+    candidates = []
+    for post in original_posts:
+        if not (0 < post["views"] < median_views):
+            continue
+        if post["bookmarks"] < 2 or post["likes"] < 3:
+            continue
+        bookmark_rate = post["bookmarks"] / post["views"] * 10000
+        like_rate = post["likes"] / post["views"] * 10000
+        if bookmark_rate >= bookmark_bar and like_rate >= like_bar:
+            candidates.append({**post,
+                               "bookmarks_per_10k_views": round(bookmark_rate, 1),
+                               "likes_per_10k_views": round(like_rate, 1)})
+    candidates.sort(key=lambda post: -post["bookmarks_per_10k_views"])
+    return candidates[:limit]
+
+
 def analyze_pulse(pulse_data, window_days, today, category_keywords, snapshot_path):
     """Pulse 模式分析:基于公开指标(views/收藏),口径为「收藏/万曝光」。
 
+    时段/类别表同时产出两套口径:窗口内(_window,供周报)与累计(供看板看长期结构)。
     没有 analytics 后台的净涨粉与主页访问;涨粉趋势来自粉丝数快照 JSONL(若提供)。
     """
     window_start = today - timedelta(days=window_days)
@@ -264,23 +322,17 @@ def analyze_pulse(pulse_data, window_days, today, category_keywords, snapshot_pa
             "likes": raw_post.get("likes") or 0,
             "bookmarks": raw_post.get("bookmarks") or 0,
             "text": re.sub(r"\s+", " ", post_text)[:60],
+            # 优先用 fetch 阶段截断前记录的真实长度；旧 pulse JSON 没有该字段时退回已截断文本的长度
+            "text_len": raw_post.get("text_len", len(post_text)),
             "url": raw_post.get("url", ""),
             "category": classify_post(post_text, category_keywords),
             "in_window": posted_at.date() >= window_start,
         })
     original_posts = [post for post in posts if post["category"] != "reply"]
 
-    slot_stats = defaultdict(lambda: {"posts": 0, "views": 0, "bookmarks": 0})
-    category_stats = defaultdict(lambda: {"posts": 0, "views": 0, "bookmarks": 0})
-    for post in original_posts:
-        slot_label = f"{post['hour'] // 2 * 2:02d}-{post['hour'] // 2 * 2 + 2:02d}"
-        slot_stats[slot_label]["posts"] += 1
-        slot_stats[slot_label]["views"] += post["views"]
-        slot_stats[slot_label]["bookmarks"] += post["bookmarks"]
-    for post in posts:
-        category_stats[post["category"]]["posts"] += 1
-        category_stats[post["category"]]["views"] += post["views"]
-        category_stats[post["category"]]["bookmarks"] += post["bookmarks"]
+    slot_stats, category_stats = build_slot_category_tables(posts)
+    window_posts = [post for post in posts if post["in_window"]]
+    slot_stats_window, category_stats_window = build_slot_category_tables(window_posts)
 
     def with_bookmark_rate(metrics):
         """补充「收藏/万曝光」比率字段。"""
@@ -308,14 +360,21 @@ def analyze_pulse(pulse_data, window_days, today, category_keywords, snapshot_pa
         "post_count_total": len(posts),
         "original_count": len(original_posts),
         "median_views": median_views,
+        "table_note": "time_slots/categories 为累计口径(供看板看长期结构);_window 后缀为本窗口口径(供周报)",
         "time_slots_beijing": [{"slot_beijing": slot, **with_bookmark_rate(metrics)}
                                for slot, metrics in sorted(slot_stats.items())],
         "categories": [{"category": name, **with_bookmark_rate(metrics)}
                        for name, metrics in sorted(category_stats.items(),
                                                    key=lambda item: -item[1]["views"])],
+        "time_slots_beijing_window": [{"slot_beijing": slot, **with_bookmark_rate(metrics)}
+                                      for slot, metrics in sorted(slot_stats_window.items())],
+        "categories_window": [{"category": name, **with_bookmark_rate(metrics)}
+                              for name, metrics in sorted(category_stats_window.items(),
+                                                          key=lambda item: -item[1]["views"])],
         "window_top_posts": sorted([p for p in original_posts if p["in_window"]],
                                    key=lambda post: -post["views"])[:10],
         "repost_candidates_grade_b": [p for p in original_posts if p.get("grade") == "B"][:5],
+        "quote_repost_candidates": find_quote_repost_candidates(original_posts, median_views),
     }
 
 

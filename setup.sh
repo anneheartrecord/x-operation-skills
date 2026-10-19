@@ -19,6 +19,45 @@ CONTENT_SKILLS=(cover-image xhs-title xhs-keyword-strategy)
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 warn() { printf '  \033[33m!\033[0m %s\n' "$1"; }
 
+# twscrape 版本下界自检。2026-07-27 事故:0.19.1 的 XClIdGen 用匿名 client 抓 x.com,拿到
+# 未登录 build → 拿不到签名 indices → 所有拉数静默返回 0 字节,X 周报连续产出「数据缺失」。
+# 依赖装在 venv 里、requirements.txt 只在重装时生效,所以这里独立复核一次实际装了什么版本。
+TWSCRAPE_FLOOR="0.19.2"
+twscrape_version_state() {
+  [[ -x "$VENV_DIR/bin/python" ]] || { echo "NOVENV"; return; }
+  "$VENV_DIR/bin/python" - "$TWSCRAPE_FLOOR" <<'PY' 2>/dev/null || echo "UNKNOWN"
+import sys
+from importlib.metadata import PackageNotFoundError, version
+
+def parse(raw):
+    out = []
+    for chunk in raw.split(".")[:3]:
+        digits = "".join(c for c in chunk if c.isdigit())
+        out.append(int(digits) if digits else 0)
+    while len(out) < 3:
+        out.append(0)
+    return tuple(out)
+
+try:
+    got = version("twscrape")
+except PackageNotFoundError:
+    print("MISSING")
+    sys.exit(0)
+print(f"OK {got}" if parse(got) >= parse(sys.argv[1]) else f"TOOLOW {got}")
+PY
+}
+
+report_twscrape() {
+  local state; state="$(twscrape_version_state)"
+  case "$state" in
+    OK*)     ok "twscrape ${state#OK } (>= $TWSCRAPE_FLOOR)" ;;
+    TOOLOW*) warn "twscrape ${state#TOOLOW } < $TWSCRAPE_FLOOR:拉数会静默返回空数据!跑 ./setup.sh 升级" ;;
+    MISSING) warn "twscrape 未安装:跑 ./setup.sh" ;;
+    NOVENV)  : ;;  # venv 缺失已由上层报过
+    *)       warn "twscrape 版本无法判定,手动核对 >= $TWSCRAPE_FLOOR" ;;
+  esac
+}
+
 echo "== x-operation-skills 部署 =="
 echo "仓库:$REPO_DIR"
 
@@ -28,12 +67,20 @@ if [[ $CHECK_ONLY -eq 0 ]]; then
     echo "建 venv:$VENV_DIR"
     python3 -m venv "$VENV_DIR"
   fi
-  echo "装依赖(twscrape curl_cffi tweepy pytest)..."
+  # 依赖清单唯一真相 = requirements.txt(含各包版本下界及其理由),此处不再内联包名。
+  echo "装依赖(requirements.txt)..."
   "$VENV_DIR/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
-  "$VENV_DIR/bin/pip" install -q twscrape curl_cffi tweepy pytest
-  ok "venv 与依赖就绪"
+  if [[ -f "$REPO_DIR/requirements.txt" ]]; then
+    "$VENV_DIR/bin/pip" install -q --upgrade -r "$REPO_DIR/requirements.txt"
+    ok "venv 与依赖就绪(按 requirements.txt)"
+  else
+    warn "requirements.txt 缺失,回退内联清单(版本下界不生效!)"
+    "$VENV_DIR/bin/pip" install -q "twscrape>=$TWSCRAPE_FLOOR" curl_cffi tweepy pytest
+  fi
+  report_twscrape
 else
   if [[ -x "$VENV_DIR/bin/python" ]]; then ok "venv 存在:$VENV_DIR"; else warn "venv 缺失,跑 ./setup.sh 建立"; fi
+  report_twscrape
 fi
 
 # 2) 软链 skill 到 Claude / Codex(哪个存在软链哪个)

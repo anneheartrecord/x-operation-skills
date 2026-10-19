@@ -54,7 +54,9 @@ python3 <skill目录>/scripts/analyze_x_data.py \
 脚本输出 JSON(两种模式同构):
 - `content.time_slots_beijing`:北京时间 2 小时分桶的时段表现(CSV 模式从 Post id 雪花 ID 反推发帖时间)
 - `content.categories`:类别转化,reply 单列;pulse 口径「收藏/万曝光」,CSV 口径「涨粉/万曝光」
+- pulse 另有 `time_slots_beijing_window`/`categories_window`:**本窗口口径**的时段/类别表——周报用这两个;不带 `_window` 的是累计口径,只供看板看长期结构,不进周报(2026-07-20 用户定)
 - `content.window_top_posts` / `repost_candidates_grade_b`:窗口 Top 帖与 B 级(低曝光高收藏,换头重发候选)
+- pulse 另有 `quote_repost_candidates`:高收藏比 + 高赞比但低曝光的帖,适合 quote/repost 二次分发(HTML 看板数据复盘页展示)
 - pulse 另有 `followers_now`/`follower_trend`(粉丝快照趋势);CSV 另有 `overview.*`(周度趋势/净涨粉)
 
 类别关键词表可用 `--categories 自定义.json` 覆盖(格式:`{"类别名": ["关键词", ...]}`)。
@@ -64,8 +66,8 @@ python3 <skill目录>/scripts/analyze_x_data.py \
 基于 JSON 写 Markdown 周报,结构固定:
 
 1. **本周大盘**:曝光、净涨粉、日均净涨粉(对照验收线,如日均 25+)、发帖数;与上周环比。
-2. **时段结论**:哪个北京时间段「涨粉/万曝光」最高。注意剔除单帖爆款扭曲——若某时段数据由 1-2 条爆款贡献,要指出样本量问题,不要直接下结论。
-3. **类别结论**:各类别涨粉效率排名,对照历史基准线,指出漂移。
+2. **时段结论(本周口径)**:本周哪个北京时间段「涨粉/万曝光」最高,pulse 模式用 `time_slots_beijing_window`。注意剔除单帖爆款扭曲——若某时段数据由 1-2 条爆款贡献,要指出样本量问题,不要直接下结论。
+3. **类别结论(本周口径)**:本周各类别涨粉效率排名(pulse 用 `categories_window`),对照历史基准线,指出漂移。累计口径的时段/类别结构不进周报,去 HTML 看板(charles-media.html 数据复盘页)看。
 4. **单帖分级**:A 级(扩成系列)、B 级(换头重发,列出候选)、C 级(停掉的选题方向)。
 > **口径修订（2026-07-15）**：①curation 类目样本量常很小（少数爆款撑均值），报类别排名时标注样本数，别把小样本均值当稳定规律。②**变现帖（开户 / affiliate）不进 A/B/C 涨粉分级**——它不为涨粉、为 affiliate 转化，按涨粉效率会被误判成 C 停掉；变现帖单独看转化价值。
 

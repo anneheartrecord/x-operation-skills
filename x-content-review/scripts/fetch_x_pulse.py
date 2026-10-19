@@ -83,22 +83,39 @@ def download_media(media_urls, target_dir):
     return saved
 
 
-def patch_xclid_proxy(proxy):
-    """把代理注入 twscrape 的 XClIdGen client(它自身不传 proxy,国内会连不上)。
+def ensure_xclid_http_backend():
+    """确保 twscrape 的 XClIdGen 走 curl 后端(国内跑通的关键);代理交给 twscrape 官方参数。
 
-    XClIdGen 生成 x-client-transaction-id 时新建的 httpx client 不带代理,且其自定义
-    transport 会忽略 env 代理;这里强制它走 curl 后端并带上代理,是国内跑通的关键。
+    2026-07-27 重写(原名 patch_xclid_proxy)。twscrape <= 0.19.1 的 XClIdGen 自建 client
+    既不带 proxy 也不带 cookie,故这里曾猴补丁 xclid._make_http_client,用 kwarg 白名单只转发
+    headers/cookies 并硬塞 proxy。该补丁有两个致命缺陷:
+      1. 白名单转发会**静默吞掉上游新增参数**。0.19.2 起 _make_client(proxy=, cookies=) 会把
+         账号 cookie 传下去(只有登录版页面才含签名 indices),旧补丁按白名单过一遍,等于随时
+         可能把上游的修复重新掐死,而且不报错。
+      2. 硬编码 make_client("curl", ...) 绕过了 0.19.2 的后端探测与 TWS_HTTP_BACKEND 机制。
+    0.19.2 已原生支持 proxy/cookies(XClIdGen.create(proxy=, cookies=),由 queue_client 用
+    acc.cookies + acc.resolve_proxy() 传入),故不再打补丁:proxy 走 API(proxy=...),后端用
+    官方 env TWS_HTTP_BACKEND 声明。
+
+    根因备忘:0.19.1 报「Couldn't get XClientTxId indices script」是因为它用**匿名** client
+    抓 x.com,拿到 entry-client-logged-out-*.js 这个未登录 build——里面没有 indices 文件可找。
+    0.19.2 改用带 cookie 的登录态抓取,并在命中未登录 build 时直接抛 XClIdAccountError。
     """
-    if not proxy:
-        return
     import twscrape.xclid as xclid
-    from twscrape.http import make_client
 
-    def make_client_with_proxy(*_args, **kwargs):
-        allowed = {key: kwargs[key] for key in ("headers", "cookies") if key in kwargs}
-        return make_client("curl", proxy=proxy, **allowed)
+    # 版本护栏:上游若再把这些符号改名/挪走,立刻大声失败,不要静默退回坏行为。
+    missing = [n for n in ("_make_client", "_make_http_client") if not hasattr(xclid, n)]
+    if missing:
+        raise RuntimeError(
+            f"twscrape.xclid 缺少预期符号 {missing},代理/后端假设可能已失效;"
+            "请核对 twscrape 版本与 xclid.py 实现后再跑。")
 
-    xclid._make_http_client = make_client_with_proxy
+    # 官方后端选择机制,只认 'curl'/'httpx'。curl(curl_cffi) 带 TLS 指纹伪装,X 对它更宽容。
+    # 用 setdefault 保留外部覆盖能力;若被显式设成 httpx,国内可能连不上,故显式提示。
+    backend = os.environ.setdefault("TWS_HTTP_BACKEND", "curl")
+    if backend != "curl":
+        print(f"警告:TWS_HTTP_BACKEND={backend}(非 curl),国内访问 X 可能失败。",
+              file=sys.stderr)
 
 
 async def build_api(username):
@@ -116,7 +133,7 @@ async def build_api(username):
         sys.exit(1)
 
     proxy = resolve_proxy()
-    patch_xclid_proxy(proxy)
+    ensure_xclid_http_backend()
     api = API(os.path.join(resolve_data_dir(), "accounts.db"), proxy=proxy)
     cookie_string = f"auth_token={auth_token}; ct0={ct0}"
     # twscrape 的 add_account 遇已存在账号会 no-op,不会刷新 cookie。为保证 env 里

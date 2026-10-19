@@ -1,0 +1,29 @@
+# x-operation-skills 运行依赖。
+# setup.sh 从本文件安装 —— 单一真相,不要在 setup.sh 里另列包名,否则两处会漂移。
+
+# ── twscrape:下界是硬约束,不要放宽 ────────────────────────────────────────────
+# 0.19.1 及更早版本的 XClIdGen 用**匿名** client 抓 x.com,只能拿到
+# entry-client-logged-out-*.js 这个未登录 build——里面没有 x-client-transaction-id
+# 所需的签名 indices 文件,于是每个拉数请求都失败,且报一个误导性的
+# 「Couldn't get XClientTxId indices script」(它把 chunk 抓取异常吞成空字符串,
+# 导致「抓不到」和「X 改了命名」报同一个错,极难定位)。
+# 0.19.2 改用带账号 cookie 的登录态抓取(XClIdGen.create(proxy=, cookies=),由
+# queue_client 传 acc.cookies + acc.resolve_proxy()),并在命中未登录 build 时直接抛
+# XClIdAccountError("Logged-out X web app")。
+# 2026-07-27 实测:0.19.1 下 x-pulse / x-analysis 恒为 0 字节,X 周报连续产出
+# 《数据缺失说明》、粉丝快照连续 6 天回显旧值;升到 0.19.2 后同账号同 cookie 立刻拉通。
+# 详见知识库 40-dashboards/定时任务总览.md「事故复盘二:X 数据管线三连静默失败」。
+twscrape>=0.19.2
+
+# ── curl_cffi:带 TLS 指纹伪装的 HTTP 后端 ─────────────────────────────────────
+# 既是 twscrape 的 'curl' backend 依赖,也被本仓直接用来下载头像/banner。
+# 国内访问 X 依赖它的指纹伪装;fetch_x_pulse.ensure_xclid_http_backend() 会把
+# TWS_HTTP_BACKEND 默认设为 curl。
+curl_cffi>=0.15.0
+
+# ── tweepy:X 官方 API v2 ──────────────────────────────────────────────────────
+# 发帖链路(x-post / x-schedule)需要;纯只读复盘/诊断不需要。
+tweepy>=4.17.0
+
+# ── pytest:仓库自带测试(见 pytest.ini)──────────────────────────────────────────
+pytest>=9.1.1
